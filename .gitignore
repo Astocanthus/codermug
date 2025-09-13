@@ -1,0 +1,4 @@
+node_modules/*
+ssl/*
+!ssl/README.md
+**/Thumbs.db

@@ -1,0 +1,19 @@
+{
+  "name": "codermug",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Blog dynamique avec Express et rendu côté serveur",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "ejs": "^3.1.9",
+    "cheerio": "^1.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  }
+}

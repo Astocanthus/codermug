@@ -1,0 +1,110 @@
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- SEO Meta Tags -->
+    <title>Accueil - Mon Blog</title>
+    <meta name="description" content="Bienvenue sur mon blog personnel où je partage mes réflexions et découvertes">
+    <meta name="keywords" content="blog, articles, réflexions">
+    <meta name="author" content="Votre Nom">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://votresite.com/">
+    
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Accueil - Mon Blog">
+    <meta property="og:description" content="Bienvenue sur mon blog personnel où je partage mes réflexions et découvertes">
+    <meta property="og:url" content="https://votresite.com/">
+    <meta property="og:site_name" content="Mon Blog">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Accueil - Mon Blog">
+    <meta name="twitter:description" content="Bienvenue sur mon blog personnel où je partage mes réflexions et découvertes">
+    
+    <!-- Schema.org JSON-LD -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Mon Blog",
+        "url": "https://votresite.com",
+        "description": "Blog personnel avec articles et réflexions"
+    }
+    </script>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    
+    <!-- Custom CSS Files -->
+    <link rel="stylesheet" href="assets/css/variables.css">
+    <link rel="stylesheet" href="assets/css/base.css">
+    <link rel="stylesheet" href="assets/css/components.css">
+    <link rel="stylesheet" href="assets/css/header.css">
+    <link rel="stylesheet" href="assets/css/footer.css">
+    <link rel="stylesheet" href="assets/css/pages.css">
+    <link rel="stylesheet" href="assets/css/articles.css">
+</head>
+
+<body>
+    <header><%- include('includes/header') %></header>
+
+    <main role="main">
+        <section class="hero py-3">
+            <article class="justify-content-center text-center">
+                <h1 class="display-4 fw-bold mb-4">Salut ! 👋</h1>
+                <p>Ici, pas de bullshit marketing. Juste des retours d'expérience concrets sur l'infra, le DevOps, et tout ce qui nous fait râler le weekend.</p>
+                <p class="lead mb-0 fs-4 text-muted">Ce que tu trouveras ici 🛠️</p>
+                <b>Infrastructure & Bare-Metal</b>
+                <p>Dell PowerEdge, Terraform, Fedora CoreOS... Automatisation complète du physique au virtuel. Parce que provisionner à la main en 2025, c'est has-been.</p>
+                <b>Kubernetes Production</b>
+                <p>K8s bare-metal, Cilium, Istio, stockage iSCSI... Du cluster qui marche vraiment, pas juste en démo.</p>
+                <b>HashiCorp Stack</b>
+                <p>Vault, Terraform, Consul... Les outils qui transforment l'infra en code avec une syntaxe sexy.</p>
+                <b>Cloud & Automation</b>
+                <p>OpenStack, AWS, Ansible avancé... Les REX qu'on ne vous dira jamais : structure optimale, pièges à éviter, bonnes pratiques du terrain.</p>
+                <b>Homelab Serious Business</b>
+                <p>Synology en mode PKI, services auto-hébergés robustes... Un homelab peut être plus fiable que du cloud.</p>
+                <p class="lead mb-0 fs-4 text-muted">Pourquoi ce blog ? 🤔</p>
+                <p>Parce qu'on est nombreux à galérer sur les mêmes problèmes, et que Google ne trouve pas toujours la bonne réponse. Parce que la documentation officielle, c'est bien beau, mais des fois on a besoin de savoir comment ça marche vraiment dans la vraie vie.</p>
+                <p>Et puis soyons honnêtes : écrire, ça m'aide à clarifier mes idées et à ne pas oublier comment j'ai résolu ce problème chelou il y a 6 mois.</p>
+            </article>
+        </section>
+
+        <!-- Articles récents -->
+        <section class="container recent-articles py-5">
+            <div class="row">
+                <div class="col-12">
+                    <div class="container">
+                        <h2 class="text-center mb-5">Articles récents</h2>
+                            <div id="recent-articles-list" class="row">
+                                <%- recentArticles %>
+                            </div>
+                    <div class="text-center mt-5">
+                        <a href="articles" class="btn btn-primary btn-lg">Voir tous les articles</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- About Preview -->
+        <section class="about-preview bg-light py-5">
+            <div class="justify-content-center text-center">
+                <h2 class="mb-4">À propos</h2>
+                <p class="lead mb-4 mx-auto">Passionné par [votre domaine], je partage ici mes découvertes et réflexions...</p>
+                <a href="about" class="btn btn-outline-primary btn-lg">En savoir plus</a>
+            </div>
+        </section>
+    </main>
+
+    <footer><%- include('includes/footer') %></footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom JS -->
+    <script src="assets/js/common.js"></script>
+</body>
+</html>

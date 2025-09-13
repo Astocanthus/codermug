@@ -1,0 +1,94 @@
+{
+  "synology-vault": {
+    "title": "Hashicorp Vault et Synology",
+    "description": "Gerer les certificats sur NAS Synology avec Vault",
+    "creationDate": "2025-06-28",
+    "lastModificationDate": "2025-07-21",
+    "category": "Platforme",
+    "tags": ["Synology", "Docker", "Swarm", "Hashicorp", "Vault", "Consul", "Certificats"],
+    "readTime": "30 min",
+    "miniature": "synology-vault.png",
+    "featured": true
+  },
+  "vault-acme": {
+   "title": "Vault et Let's Encrypt",
+   "description": "Générer ces certificats publics entièrement avec Vault et ACME sur Route53 (AWS)",
+   "creationDate": "2025-06-29",
+   "lastModificationDate": "2025-07-04",
+   "category": "Plateforme",
+   "tags": ["HashiCorp", "Vault", "Certificats", "SSL", "AWS", "Route53", "Let's Encrypt", "DNS"],
+   "readTime": "30 min",
+   "miniature": "",
+   "featured": false
+  },
+  "dell-poweredge-terraform": {
+    "title": "Automatisation serveurs physiques<br/>[Part 1/2]",
+    "description": "Configurer des serveurs Dell PowerEdge avec Terraform",
+    "creationDate": "2025-06-30",
+    "category": "Infrastructure",
+    "tags": ["Dell PowerEdge", "iDrac", "Terraform"],
+    "readTime": "15 min",
+    "miniature": "terraform-idrac.png",
+    "featured": false
+  },
+  "dell-poweredge-fedora-coreos": {
+    "title": "Automatisation serveurs physiques<br/>[Part 2/2]",
+    "description": "Installer et configurer Fedora CoreOS avec iPXE sur Dell PowerEdge",
+    "creationDate": "2025-07-01",
+    "category": "Infrastructure",
+    "tags": ["Dell PowerEdge", "iPXE", "FedoraCore OS"],
+    "readTime": "15 min",
+    "miniature": "",
+    "featured": false
+  },
+  "fedora-coreos-kubernetes": {
+    "title": "Installer Kubernetes complet sur système immutable<br/>[Part 1/3]",
+    "description": "Installer Kubernetes sur Fedora CoreOS avec Podman, Hyperkube et Vault",
+    "creationDate": "2025-07-02",
+    "category": "DevOPS",
+    "tags": ["FedoraCore OS", "Podman", "Hyperkube", "Kubernetes","Hashicorp", "Vault"],
+    "readTime": "15 min",
+    "miniature": "",
+    "featured": false
+  },
+  "crio-cilium-kubernetes": {
+    "title": "Installer Kubernetes complet sur système immutable<br/>[Part 2/3]",
+    "description": "Configurer Kubernetes pour utiliser Cilium et CRI-O",
+    "creationDate": "2025-07-03",
+    "category": "DevOPS",
+    "tags": ["FedoraCore OS", "Podman", "Hyperkube", "Kubernetes", "CRI-O", "Cilium", "Hashicorp", "Vault"],
+    "readTime": "15 min",
+    "miniature": "",
+    "featured": false
+  },
+  "kubernetes-istio-iscsi-secret-helm": {
+    "title": "Installer Kubernetes complet sur système immutable<br/>[Part 3/3]",
+    "description": "Configurer Istio CNI, iSCSI Synology CSI, Vault secret engine avec Helm",
+    "creationDate": "2025-07-04",
+    "category": "DevOPS",
+    "tags": ["Kubernetes", "Istio", "Synology", "iSCSI", "Hashicorp", "Vault", "Helm"],
+    "readTime": "15 min",
+    "miniature": "",
+    "featured": false
+  },
+  "rex-ansible": {
+    "title": "REX - Ansible avancé",
+    "description": "Ce que l'on ne dira pas sur l'utilisation et la structure optimal d'Ansible",
+    "creationDate": "2025-07-10",
+    "category": "DevOPS",
+    "tags": ["Ansible"],
+    "readTime": "15 min",
+    "miniature": "ansible.png",
+    "featured": false
+  },
+  "rex-terraform": {
+    "title": "REX - Terraform avancé",
+    "description": "Ce que l'on ne dira pas sur l'utilisation et la structure optimal de Terraform",
+    "creationDate": "2025-07-10",
+    "category": "DevOPS",
+    "tags": ["Terraform"],
+    "readTime": "15 min",
+    "miniature": "terraform.png",
+    "featured": false
+  }
+}

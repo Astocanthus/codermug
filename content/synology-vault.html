@@ -1,0 +1,2584 @@
+<div class="mt-3">
+    <header class="mb-2">
+        <h1 class="display-4">HashiCorp Vault sur Synology : <br />Fini les
+            certificats pourris ! 🔐</h1>
+        <h3 class="lead text-muted">Ou comment j'ai arrêté de pleurer devant
+            mes
+            certificats auto-signés</h3>
+    </header>
+
+    <section class="alert alert-primary border-left-primary" role="alert">
+        <h5>TL;DR pour les pressés</h5>
+        <p class="mb-0">On va installer Vault sur un Synology pour générer et
+            renouveler automatiquement nos certificats SSL. Plus jamais
+            d'erreurs "certificat non valide" dans le navigateur ou pour connecter un
+            service, plus jamais de
+            weekend gâché à renouveler manuellement des certificats expirés.
+            Promise de dev ! 🤞</p>
+    </section>
+
+    <section>
+        <h2 class="pb-3 pt-2">🤦‍♂️ Le problème qu'on connaît tous</h2>
+
+        <p>Bon, soyons honnêtes. Qui n'a jamais eu ce moment de pure frustration
+            :</p>
+
+        <div class="card bg-light mb-4">
+            <div class="card-body">
+                <p class="font-italic mb-0">"Putain, mais pourquoi mon certificat
+                    SSL a expiré un dimanche à 23h45 ? Et bien sûr, c'est pile
+                    au moment où le patron veut montrer la nouvelle
+                    fonctionnalité à ses potes..."</p>
+            </div>
+        </div>
+
+        <p>Ou alors cette magnifique erreur qui fait toujours plaisir :</p>
+
+        <div class="alert alert-danger mb-4">
+            <strong>NET::ERR_CERT_AUTHORITY_INVALID</strong>
+            <p class="mb-0">
+                Votre connexion n'est pas privée. Des individus malveillants
+                tentent peut-être de dérober vos informations...
+            </p>
+        </div>
+
+        <p>Yeah, génial ! Sans compter que parfois c'est un service qui te le sort et
+            lui il n'arrive carrément pas à se connecter avec ! 😅</p>
+
+        <p>Et ne parlons pas de ces moments où tu configures ton homelab avec
+            des certificats auto-signés "juste pour tester", et que 6 mois plus
+            tard tu t'aperçois que la moitié de tes services sont encore en HTTP
+            ou avec des certificats foireux.</p>
+
+        <blockquote class="blockquote p-4 my-4">
+            <p>"Il n'y a que deux types de développeurs : ceux qui ont déjà eu
+                des problèmes de certificats, et ceux qui mentent."</p>
+            <footer class="blockquote-footer">Un sage développeur, probablement
+            </footer>
+        </blockquote>
+    </section>
+
+    <section>
+        <h2 class="pb-3 pt-2">💡 La solution : Vault + Synology = ❤️</h2>
+
+        <p>Alors voilà l'idée géniale (bon, pas de moi, merci HashiCorp) :
+            utiliser <strong>HashiCorp Vault</strong> comme une PKI (Public Key
+            Infrastructure) pour générer automatiquement nos certificats SSL.
+        </p>
+
+        <p>Mais attention, on ne va pas juste installer Vault et l'oublier dans
+            un coin. Non non non. On va faire ça proprement avec :</p>
+
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card border-primary h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h5 data-no-menu class="card-title mt-2"><i class="fas fa-database"></i> Consul</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">Notre backend de stockage. Parce
+                            que Vault tout seul, c'est comme un frigo vide : ça
+                            sert à rien.</p>
+                        <small class="text-muted">Stockage distribué, haute
+                            disponibilité, tout ça...</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mt-4 mt-md-0">
+                <div class="card border-success h-100">
+                    <div class="card-header bg-success text-white">
+                        <h5 data-no-menu class="card-title mt-2"><i class="fas fa-key"></i> Vault</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">Le chef d'orchestre. Il génère les
+                            certificats, gère les secrets, et fait tout ça de
+                            manière sécurisée.</p>
+                        <small class="text-muted">PKI, secrets management, API
+                            REST...</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mt-4 mt-md-0">
+                <div class="card border-warning h-100">
+                    <div class="card-header bg-warning text-white">
+                        <h5 data-no-menu class="card-title mt-2"><i class="fas fa-robot"></i> Vault-Agent</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">Le petit robot qui fait le sale
+                            boulot : récupère les certificats et les déploie
+                            automatiquement.</p>
+                        <small class="text-muted">Templating, déploiement,
+                            redémarrage des services...</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert alert-info">
+            <strong>Mais pourquoi sur Synology ?</strong>
+            <p class="mb-0">Parce que ton NAS Synology tourne H24, qu'il a
+                Docker, et qu'il est parfait pour héberger ce genre de services
+                d'infrastructure ! Et puis soyons honnêtes, on a tous un
+                Synology qui tourne dans un coin, autant qu'il serve à quelque
+                chose d'utile. 😏 Oui, oui Netflix tu m'as vu 🙃 </p>
+        </div>
+    </section>
+
+    <section>
+        <h2 class="pb-3 pt-2">🏗️ Architecture de notre petit chef-d'œuvre</h2>
+
+        <p>Bon, avant de se lancer tête baissée dans les commandes, comprenons
+            un peu ce qu'on va construire :</p>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <strong>Phase 1 : "Houston, we have a problem"</strong>
+                <p>Au début, notre Vault backé par Consul sera accessible en
+                    HTTP (oui, je sais, c'est ironique pour un truc qui gère la
+                    sécurité). Mais c'est temporaire, le temps qu'on configure
+                    tout.</p>
+
+                <strong>Phase 2 : "The magic happens"</strong>
+                <p>Une fois configuré, Vault-Agent va :</p>
+                <ul class="mt-2">
+                    <li>Se connecter à Vault avec ses identifiants en HTTP.
+                        <br />Mais lui il sera sur le réseau Docker donc il a le
+                        droit !
+                    </li>
+                    <li>Générer un nouveau certificat SSL</li>
+                    <li>Le déployer dans le bon répertoire de Synology</li>
+                    <li>Redémarrer Nginx pour prendre en compte le nouveau
+                        certificat</li>
+                    <li>Répéter tout ça automatiquement avant expiration</li>
+                </ul>
+
+                <strong>Phase 3 : "Profit!"</strong>
+                <p class="mb-0">Résultat : on accède à Vault en HTTPS depuis l'exterieur
+                    avec un certificat
+                    valide, et tous nos autres services peuvent bénéficier du
+                    même système !</p>
+            </div>
+        </div>
+
+        <div class="alert alert-success">
+            <strong>Le truc cool</strong>
+            <p>Une fois que c'est en place, tu peux générer des
+                certificats pour tous tes services internes : le NAS,
+                Portainer, ton API maison, etc. Un seul endroit pour gérer tous
+                tes certificats !
+            </p>
+            <p class="mb-0">Autre point positif : Vault est
+                générique, tu n'es même pas obligé de lui faire générer des
+                certificats : tu peux aussi lui en fournir comme...
+                ceux d'un Let's Encrypt avec un Cerbot pour exposer ton service
+                sur Internet par example 😉 <br /> Mais cela sera l'object d'un
+                autre article notament sur Kubernetes avec Cert-manager pour
+                celles et ceux qui conaissent déjà. </p>
+        </div>
+    </section>
+
+    <section>
+        <h2 class="pb-3 pt-2">📁 Structure du projet (ou "comment s'organiser
+            comme un chef")</h2>
+        <p>Treve de bavardage, passons à la pratique</p>
+        <p>On commence par créer notre petite architecture. Parce que oui,
+            l'organisation c'est important (même si on fait tous semblant de
+            s'en foutre) :</p>
+        <p>Le point de départ sur mon Synology où je vais travailler : </p>
+        <ul class="mt-2">
+            <li>sur la partition RAID1 que j'ai crée : <kbd>volume1</kbd></li>
+            <li>dans un dossier partagé : <kbd>docker</kbd> qui me sert bah à
+                tous mes Dockers hein logique ! En plus il backupé sur AWS toutes
+                les nuits donc les configs ne vont pas s'envoler 😉.</li>
+            <li>dans un dossier spécifique : <kbd>secret</kbd> afin de ne pas
+                mélanger les choux et les carottes.</li>
+        </ul>
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mt-2"><i class="fas fa-folder-open"></i> Arborescence
+                    du projet</h6>
+            </div>
+            <div class="card-body">
+                <pre class="rounded px-3 m-3"><code class="text-dark">📁 /volume1/docker/secret/
+├── 🐳 swarm_consul_vault.yml          # Orchestration pour Consul & Vault
+├── 🐳 swarm_vault_agent.yml           # Orchestration pour Vault-Agent
+├── 📁 consul/
+│   ├── 📁 config/
+│   │   ├── 📄 server.hcl           # Config Consul
+│   │   └── 📄 start-consul.sh      # Script de démarrage
+│   └── 📁 data/                    # Données Consul (généré auto)
+├── 📁 vault/
+│   ├── 📁 config/
+│   │   └── 📄 vault.hcl            # Config Vault
+└── 📁 vault-agent/
+    ├── 📁 config/
+    │   └── 📄 agent.hcl            # Config de l'agent
+    │   └── 📄 restart_service.sh   # Script de redémarrage
+    └── 📁 templates/     
+        └── 📄 cert.tpl            # Template de certificat</code></pre>
+            </div>
+        </div>
+
+        <p class="mt-3">Chaque dossier a son rôle, chaque fichier a sa mission.
+            C'est beau, c'est organisé, ça donne envie de pleurer de bonheur !
+            🥲</p>
+    </section>
+
+    <section>
+        <h2 class="pb-3 pt-2">🚀 Phase 1 : On met le bazaar en place</h2>
+
+        <p>Bon, maintenant qu'on a compris le principe, on va passer aux choses
+            sérieuses. Prépare-toi un bon café, on va faire du Docker Swarm !
+        </p>
+        <p>Oui je sais tu ne l'avais pas vu venir celle-là hein ☺️!</p>
+        <p>La vérité c'est que l'interface Docker de Synology est bien trop
+            limité. Deplus sur le long terme si tu as envie d'avoir
+            plusieurs Synology, tu pouras étandre le Swarm dessus (et donc
+            notament le vault-agent automatiquement) pas mal hein !</p>
+
+        <div class="alert alert-warning">
+            <strong>Attention, moment critique !</strong>
+            <p class="mb-0">Avant de commencer, assure-toi d'avoir accès SSH à
+                ton Synology et que Docker est installé ET configuré. Si tu ne sais pas
+                comment faire, Google est ton ami (ou ChatGPT, on ne juge pas).
+            </p>
+        </div>
+    </section>
+
+    <section>
+        <div class="card my-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-play"></i> Étape 1 :
+                    Initialisation du swarm</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-column flex-md-row align-items-center gap-3">
+                    <img class="balaine-side" src="../../assets/images/synology-vault/balaine.webp"
+                        alt="Ma jolie baleine">
+                    <div>
+                        <p>Première étape : on active notre Docker en mode Swarm.
+                            Pourquoi ? Parce que ça nous permet d'utiliser les secrets
+                            Docker (bien plus sécurisé que des variables
+                            d'environnement).</p>
+                        <p class="mb-0">
+                            Je ferai probablement un article sur Docker Swarm. Je trouve
+                            cette techno vraiment sous-estimée alors qu'elle peut rendre
+                            de sacrés services (comme ici), surtout face au monstre
+                            Kubernetes qui demande énormement de configuration. Mais bon, restons
+                            concentrés, on n'est pas là
+                            pour parler des Godzilla du cloud !
+                        </p>
+                    </div>
+                </div>
+
+                <pre class="bg-dark text-light p-3 rounded my-3">
+<code class="language-bash"># On active le mode swarm sur l'interface réseau principale (chez moi c'est la premiere eth0)
+docker swarm init --advertise-addr eth0
+</code></pre>
+                <p>Bon, là il n'y a pas grand-chose à dire : Docker est déjà
+                    installé via le gestionnaire de paquets de Synology, et
+                    Swarm est nativement intégré à Docker Engine depuis près de
+                    dix ans.</p>
+                <p>Pensez simplement à enregistrer le token, au cas où tu
+                    souhaiterais ajouter d'autres Synology au cluster Swarm à
+                    l'avenir.</p>
+                <p class="mb-0">Dans l'absolu, nous allons utiliser très peu de
+                    fonctionnalités de Swarm : déploiement, réplication,
+                    exposition de services et gestion des secrets.</p>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-layer-group"></i> Étape 2 : Déploiement de la stack
+                </h5>
+            </div>
+            <div class="card-body">
+                <p>
+                    Dans les sections suivantes, nous allons décortiquer chaque fichier de configuration que j'ai
+                    présenté dans l'arborescence du projet. Des <code>orchestrations yaml</code> jusqu'au
+                    <code>template Vault</code> en
+                    passant par les <code>scripts de démarrage</code>, chaque ligne sera expliquée avec le soin d'un
+                    développeur qui
+                    documente son code... parce que oui, ça arrive parfois !
+                </p>
+                <p>
+                    Alors, sort ton café ☕, ouvrez ton éditeur préféré (et non, Notepad ne compte pas), et
+                    on va attaquer ces YAML, HCL et Bash scripts qui vont transformer ton NAS en
+                    véritable coffre-fort numérique.
+                </p>
+                <div class="accordion" id="accordionPanelsStayOpenExample">
+                    <div class="accordion" id="accordionPanelsStayOpenExample">
+                        <!-- Bloc swarm_consul_vault.yml -->
+                        <div class="accordion-item">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#panelsStayOpen-consulVault" aria-expanded="false"
+                                    aria-controls="panelsStayOpen-consulVault">
+                                    <ol class="breadcrumb m-0">
+                                        <li class="breadcrumb-item">secret</li>
+                                        <li class="breadcrumb-item">swarm_consul_vault.yml</li>
+                                    </ol>
+                                </button>
+                            </h3>
+                            <div id="panelsStayOpen-consulVault" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <strong>Stack 1 — Consul + Vault :</strong>
+                                    <p>
+                                        Cette stack déploie les services <code>consul</code> et <code>vault</code> avec
+                                        leurs volumes, réseaux et configurations spécifiques. Elle utilise une syntaxe
+                                        compatible Docker Compose, que Docker Swarm comprend et interprète sans souci.
+                                    </p>
+                                    <p>
+                                        Cette première stack prépare le backend de stockage de Vault avec Consul, et
+                                        déploie Vault en mode serveur.
+                                    </p>
+                                    <div class="alert alert-warning">
+                                        <strong>Important :</strong> Toujours déployer cette stack en premier. Le
+                                        Vault-Agent (stack 2) dépendra de ce serveur et ne fonctionnera pas sans.
+                                    </div>
+
+                                    <strong>Explications des options clés :</strong>
+                                    <ul>
+                                        <li><code>cap_add: IPC_LOCK</code> : Permet à Vault de verrouiller sa mémoire et
+                                            éviter que des secrets ne soient échangés sur le disque.</li>
+                                        <li><code>volumes</code> : Persistence des informations, chargement des
+                                            configurations et synchronisation de l'heure avec l'hôte via
+                                            <code>/etc/localtime</code> pour éviter les problèmes de logs et
+                                            certificats.
+                                        </li>
+                                        <li><code>secrets:</code> Les clés de chiffrement sont injectées de façon
+                                            sécurisée via les secrets Swarm.</li>
+                                        <li><code>networks: secret</code> : Un réseau overlay Swarm dédié
+                                            pour isoler la communication entre services.</li>
+                                        <li><code>healthcheck</code> : Teste périodiquement la disponibilité des
+                                            services (ex: API Consul, endpoint santé Vault).</li>
+                                        <li><code>deploy.restart_policy</code> : Paramètres pour gérer automatiquement
+                                            la résilience en cas d'erreurs.</li>
+                                    </ul>
+
+                                    <p>
+                                        Voici le fichier <code>swarm_consul_vault.yml</code> complet avec tous les
+                                        commentaires qui expliquent chaque section en détail :
+                                    </p>
+
+                                    <pre class="bg-dark text-light p-3 rounded mh-100" style="white-space: pre-wrap;">
+<code class="language-yaml">version: "3.8"
+
+services:
+  consul:
+    image: hashicorp/consul:1.17
+    ports:
+      # Port web UI et API Consul
+      - "8500:8500"
+    volumes:
+      # Configuration de Consul en lecture seule
+      - /volume1/docker/secret/consul/config:/consul/config
+      # Données persistantes pour Consul
+      - /volume1/docker/secret/consul/data:/consul/data
+      # Synchronisation de l'heure avec l'hôte pour cohérence temporelle
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      # Informations sur le cluster Consul
+      CONSUL_DATACENTER: Low-layer
+      CONSUL_DOMAIN: consul
+      CONSUL_NODE_NAME: synology-01-consul
+      # Clé de chiffrement réseau, injectée via secret
+      CONSUL_ENCRYPT_KEY_FILE: /run/secrets/consul-encrypt-key
+      # Identifiants utilisateur/groupe pour permissions d'accès
+      PUID: 1027
+      PGID: 100
+    command: sh /consul/config/start_consul.sh
+    networks:
+      - secret
+    secrets:
+      # Secret Consul encrypt key externe
+      - consul-encrypt-key
+    healthcheck:
+      # Test pour vérifier que Consul est joignable
+      test: ["CMD", "consul", "members", "-http-addr=http://localhost:8500"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 30s
+        max_attempts: 20
+        window: 600s
+
+  vault:
+    image: hashicorp/vault:1.15
+    cap_add:
+      # Verrouillage mémoire pour éviter le swap des secrets sur disque
+      - IPC_LOCK
+    ports:
+      # Port de l'API Vault et UI accessible via 8200
+      - "8200:8200"
+    volumes:
+      # Configuration Vault
+      - /volume1/docker/secret/vault/config:/vault/config
+      # Synchronisation de l'heure avec l'hôte pour éviter dérives
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      PUID: 1027
+      PGID: 100
+    command: vault server -config=/vault/config/vault.hcl
+    networks:
+      - secret
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 30s
+        max_attempts: 20
+        window: 600s
+    healthcheck:
+      # Vérifie la santé de Vault, accepte aussi état non initialisé ou scellé
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8200/v1/sys/health?uninitcode=200&sealedcode=200"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+# Secrets à créer à la main avant déploiement
+secrets:
+  consul-encrypt-key:
+    external: true
+
+# Réseau chiffré Swarm externe déjà créé (overlay)
+networks:
+  secret:
+    name: secret
+    external: true
+</code></pre>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bloc swarm_vault_agent.yml -->
+                        <div class="accordion-item">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#panelsStayOpen-vaultAgent" aria-expanded="false"
+                                    aria-controls="panelsStayOpen-vaultAgent">
+                                    <ol class="breadcrumb m-0">
+                                        <li class="breadcrumb-item">secret</li>
+                                        <li class="breadcrumb-item">swarm_vault_agent.yml</li>
+                                    </ol>
+                                </button>
+                            </h3>
+                            <div id="panelsStayOpen-vaultAgent" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <strong>Stack 2 — Vault Agent :</strong>
+                                    <p>
+                                        Cette stack déploie le <code>vault_agent</code>, un client Vault qui s'exécute
+                                        sur tous les nœuds (mode <code>global</code>). Il s'authentifie via un AppRole
+                                        sécurisé (avec <code>role_id</code> et <code>secret_id</code>) et récupère les
+                                        secrets, en particulier les certificats, qu'il écrit directement dans les
+                                        emplacements système des NAS Synology.
+                                    </p>
+
+                                    <strong>Pourquoi deux stacks ?</strong>
+                                    <ul>
+                                        <li><strong>Première stack :</strong> déploie le backend <code>consul</code> +
+                                            <code>vault</code>, nécessaire pour initialiser et faire tourner Vault.
+                                        </li>
+                                        <li><strong>Deuxième stack :</strong> déploie l'agent Vault qui consomme les
+                                            secrets, il ne peut être lancé qu'après que Vault est initialisé et
+                                            déverrouillé.</li>
+                                    </ul>
+
+                                    <div class="alert alert-info">
+                                        <strong>Note de sécurité :</strong> Le Vault Agent requiert des droits élevés
+                                        (<code>root</code>), des capacités spécifiques (<code>SYS_CHROOT</code>,
+                                        <code>IPC_LOCK</code>) et accès en lecture sur le système hôte. Cela permet
+                                        notamment d'appliquer les certificats et de redémarrer les services (nginx
+                                        notamment) sur le NAS.
+                                    </div>
+
+                                    <strong>Explications des options clés :</strong>
+                                    <ul>
+                                        <li><code>user: root</code> pour avoir tous les droits nécessaires.</li>
+                                        <li><code>cap_add: IPC_LOCK</code> pour verrouiller la mémoire et protéger les
+                                            secrets.</li>
+                                        <li><code>cap_add: SYS_CHROOT</code> pour utiliser chroot et accéder au système hôte,
+                                        notamment pour redémarrer des services.</li>
+                                        <li><code>volumes</code> importants :
+                                            <ul>
+                                                <li>Les configs agent et templates de certificats.</li>
+                                                <li>L'emplacement des certificats Synology (avec RW).</li>
+                                                <li>L'accès au système hôte en lecture pour contrôle et actions.</li>
+                                            </ul>
+                                        </li>
+                                        <li><code>secrets</code> : injection des <code>role_id</code> et
+                                            <code>secret_id</code> via secrets Docker Swarm.
+                                        </li>
+                                        <li><code>deploy.mode: global</code> pour garantir la présence d'un agent par
+                                            nœud.</li>
+                                    </ul>
+
+                                    <p>
+                                        Voici le fichier <code>swarm_vault_agent.yml</code> complet avec commentaires
+                                        pour bien comprendre chaque partie :
+                                    </p>
+
+                                    <pre class="bg-dark text-light p-3 rounded mh-100" style="white-space: pre-wrap;">
+<code class="language-yaml">version: "3.8"
+
+services:
+  vault_agent:
+    image: hashicorp/vault:1.15
+    user: root
+    cap_add:
+      # Protection mémoire pour éviter le swap des secrets
+      - IPC_LOCK
+      # Permet d'utiliser chroot pour accéder au système hôte (ex: pour redémarrer nginx)
+      - SYS_CHROOT 
+    volumes:
+      # Configuration de l'agent Vault
+      - /volume1/docker/secret/vault_agent/config:/vault/config
+      # Templates des certificats TLS à générer
+      - /volume1/docker/secret/vault_agent/templates:/vault/templates
+      # Emplacement des certificats Synology, accès lecture/écriture
+      - /usr/syno/etc/certificate/_archive:/certs:rw
+      # Synchronisation horaire avec l'hôte
+      - /etc/localtime:/etc/localtime:ro
+      # Accès en lecture au système hôte pour contrôle et redémarrage
+      - /:/host:ro
+    secrets:
+      # Credentials AppRole Vault injectés via secrets Swarm
+      - vault-role-id
+      - vault-secret-id
+    command: sh -c "vault agent -config=/vault/config/agent.hcl"
+    networks:
+      - secret
+    deploy:
+      # Lancement d'un agent sur chaque nœud du Swarm
+      mode: global
+      restart_policy:
+        condition: any
+        delay: 30s
+        max_attempts: 20
+        window: 600s
+
+# Secrets AppRole à créer manuellement avant déploiement
+secrets:
+  vault-role-id:
+    external: true
+  vault-secret-id:
+    external: true
+
+# Réseau chiffré overlay Swarm partagé entre services
+networks:
+  secret:
+    name: secret
+    external: true
+</code></pre>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="accordion-item">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#panelsStayOpen-collapseTwo" aria-expanded="false"
+                                    aria-controls="panelsStayOpen-collapseTwo">
+                                    <ol class="breadcrumb m-0">
+                                        <li class="breadcrumb-item">secret</li>
+                                        <li class="breadcrumb-item">consul</li>
+                                        <li class="breadcrumb-item">config</li>
+                                        <li class="breadcrumb-item">server.hcl</li>
+                                    </ol>
+                                </button>
+                            </h3>
+                            <div id="panelsStayOpen-collapseTwo" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <strong>Le server.hcl : Quand la simplicité rencontre l'efficacité</strong>
+
+                                    <p>Ce fichier <code>server.hcl</code> est probablement le plus court de notre stack,
+                                        mais ne t'y trompes pas ce petit fichier optimise silencieusement les
+                                        performances
+                                        de Consul.</p>
+
+                                    <strong>Le multiplicateur Raft :</strong>
+                                    <p>
+                                        Consul utilise l'algorithme Raft pour maintenir la cohérence des données dans le
+                                        cluster. Ce multiplicateur est un facteur d'échelle qui affecte directement les
+                                        timeouts de HeartbeatTimeout, ElectionTimeout et LeaderLeaseTimeout.
+                                    </p>
+
+
+                                    <p>
+                                        <code>raft_multiplier = 1</code>
+                                        <span>Configuration haute performance recommandée pour la
+                                            production. HashiCorp recommande de configurer ce paramètre à 1 en
+                                            production
+                                            pour permettre aux serveurs Consul de détecter rapidement une défaillance du
+                                            leader et de terminer les élections de leader beaucoup plus
+                                            rapidement.</span>
+                                    </p>
+
+                                    <div class="alert alert-success">
+                                        <strong>Pourquoi raft_multiplier = 1 ?</strong>
+                                        <ul class="mb-0 mt-2">
+                                            <li><strong>Performance optimale :</strong> Détection rapide des
+                                                défaillances et
+                                                élections de leader plus rapides</li>
+                                            <li><strong>Réseau local :</strong> Convient parfaitement aux environnements
+                                                avec faible latence réseau</li>
+                                            <li><strong>Production ready :</strong> Configuration recommandée par
+                                                HashiCorp
+                                            </li>
+                                            <li><strong>Timeouts optimisés :</strong> HeartbeatTimeout=1000ms,
+                                                ElectionTimeout=1000ms, LeaderLeaseTimeout=500ms</li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="alert alert-warning">
+                                        <strong>⚠️ Attention :</strong>
+                                        <p class="mb-0">
+                                            La valeur par défaut de Consul est 5 (pour des instances t2.micro AWS), mais
+                                            cela rend la détection de défaillance et les élections beaucoup plus lentes.
+                                            Dans notre environnement NAS local, <code>1</code> est le choix optimal !
+                                        </p>
+                                    </div>
+
+                                    <div class="alert alert-primary">
+                                        <strong>📖 Documentation officielle</strong>
+                                        <p class="mb-0">
+                                            Pour plus de détails sur les paramètres de performance Consul, consultez la
+                                            <a href="https://developer.hashicorp.com/consul/docs/reference/architecture/server"
+                                                target="_blank" class="text-decoration-none">documentation HashiCorp sur
+                                                les
+                                                exigences serveur</a>.
+                                        </p>
+                                    </div>
+
+                                    <p>En résumé, ce fichier fait exactement ce qu'il faut : il configure Consul pour
+                                        qu'il
+                                        fonctionne avec les performances optimales recommandées par HashiCorp.
+                                        Contrairement
+                                        aux idées reçues, la valeur <code>1</code> n'est pas la "configuration par
+                                        défaut"
+                                        mais bien la <strong>configuration haute performance</strong> pour la production
+                                        !
+                                    </p>
+                                    <pre class="bg-dark text-light p-3 rounded mh-100">
+<code class="language-hcl"># Configuration de performance pour Consul
+performance {
+  # Multiplicateur Raft pour ajuster les timeouts
+  # Valeur 1 = configuration pour la production
+  raft_multiplier = 1
+}</code>
+</pre>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#panelsStayOpen-collapseThree" aria-expanded="false"
+                                    aria-controls="panelsStayOpen-collapseThree">
+                                    <ol class="breadcrumb m-0">
+                                        <li class="breadcrumb-item">secret</li>
+                                        <li class="breadcrumb-item">consul</li>
+                                        <li class="breadcrumb-item">config</li>
+                                        <li class="breadcrumb-item">start_consul.sh</li>
+                                    </ol>
+                                </button>
+                            </h3>
+                            <div id="panelsStayOpen-collapseThree" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <strong>Le start_consul.sh : Quand Docker rencontre l'auto-configuration</strong>
+
+                                    <p>Le script shell <code>start_consul.sh</code> fait le travail ingrat que personne
+                                        ne
+                                        veut faire : récupérer
+                                        automatiquement l'IP du conteneur et démarrer Consul avec les bons paramètres.
+                                        Parce
+                                        que personne n'a envie de faire du <code>docker inspect</code> à chaque
+                                        redémarrage
+                                        !</p>
+
+                                    <strong>🔍 Détection automatique de l'IP</strong>
+                                    <p>
+                                        <code>IP=$(getent hosts $HOSTNAME | awk '{ print $1 }')</code> - Cette ligne
+                                        magique récupère l'IP du conteneur dans le réseau Docker. Plus besoin de deviner
+                                        ou de hardcoder une IP !
+                                    </p>
+
+                                    <strong>🚀 Paramètres de démarrage Consul :</strong>
+                                    <ul>
+                                        <li><code>-server</code> Mode serveur (pas agent)</li>
+                                        <li><code>-ui </code> Active l'interface web</li>
+                                        <li><code>-client="0.0.0.0"</code> Écoute sur toutes les
+                                            interfaces</li>
+                                        <li><code>-bind="$IP"</code> IP d'écoute pour
+                                            le cluster</li>
+                                        <li><code>-advertise="$IP"</code> IP annoncée aux autres
+                                            nœuds</li>
+                                    </ul>
+
+                                    <strong>⚠️ Configuration cluster mono-nœud :</strong>
+                                    <p>
+                                        <code>-bootstrap-expect=1</code> indique à Consul qu'il n'y aura qu'un seul
+                                        serveur dans le cluster. Parfait pour notre NAS, mais attention à ne pas
+                                        utiliser cette configuration pour un vrai cluster distribué !
+                                    </p>
+
+                                    <strong>📁 Répertoires et logs :</strong>
+                                    <ul>
+                                        <li><code>-data-dir="/consul/data"</code> - Stockage persistant des données</li>
+                                        <li><code>-config-dir="/consul/config"</code> - Répertoire de configuration</li>
+                                        <li><code>-log-level="INFO"</code> - Niveau de logs équilibré</li>
+                                        <li><code>-disable-host-node-id=true</code> - Désactive l'ID basé sur l'hôte
+                                            (recommandé pour Docker)</li>
+                                    </ul>
+
+                                    <p>Le <code>exec</code> final remplace le processus shell par Consul, permettant une
+                                        gestion propre des signaux Docker (<code>PID 1</code>). C'est la différence
+                                        entre un
+                                        script amateur et un
+                                        script professionnel !</p>
+
+                                    <div class="alert alert-success">
+                                        <strong>💡 Pourquoi ce script ?</strong>
+                                        <p class="mb-0">
+                                            Docker attribue des IPs dynamiques aux conteneurs. Ce script évite les
+                                            configurations statiques fragiles et s'adapte automatiquement à
+                                            l'environnement
+                                            Docker Swarm, même si l'IP change.
+                                        </p>
+                                    </div>
+                                    <pre class="bg-dark text-light p-3 rounded mh-100">
+<code class="language-shell">#!/bin/sh
+
+# Retrieves the IP on the 'secret' network (adapt the interface name if needed)
+IP=$(getent hosts $HOSTNAME | awk '{ print $1 }')
+
+echo "Starting Consul with IP: $IP"
+
+# Read encryption key in secret Docker Swarm
+if [ -f /run/secrets/consul-encrypt-key ]; then
+    ENCRYPT_KEY=$(cat $CONSUL_ENCRYPT_KEY_FILE)
+    echo "Encrypt key load from secret"
+else
+    echo "ERROR: Secret consul-encrypt-key not found!"
+    exit 1
+fi
+
+
+exec consul agent \
+  -server \
+  -ui \
+  -client="0.0.0.0" \
+  -bind="$IP" \
+  -advertise="$IP" \
+  -bootstrap-expect=1 \
+  -data-dir="/consul/data" \
+  -config-dir="/consul/config" \
+  -log-level="INFO" \
+  -encrypt="$ENCRYPT_KEY" \
+  -datacenter="$CONSUL_DATACENTER" \
+  -domain="$CONSUL_DOMAIN" \
+  -node="$CONSUL_NODE_NAME" \
+  -disable-host-node-id=true</code>
+</pre>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#panelsStayOpen-collapseFour" aria-expanded="false"
+                                    aria-controls="panelsStayOpen-collapseFour">
+                                    <ol class="breadcrumb m-0">
+                                        <li class="breadcrumb-item">secret</li>
+                                        <li class="breadcrumb-item">vault</li>
+                                        <li class="breadcrumb-item">config</li>
+                                        <li class="breadcrumb-item">vault.hcl</li>
+                                    </ol>
+                                </button>
+                            </h3>
+                            <div id="panelsStayOpen-collapseFour" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <strong>Le vault.hcl : Configuration du coffre-fort numérique</strong>
+
+                                    <p>Ce fichier <code>vault.hcl</code> est le cerveau de notre Vault. Contrairement au
+                                        server.hcl minimaliste, celui-ci contient tous les paramètres essentiels pour
+                                        faire
+                                        tourner notre coffre-fort en mode production.</p>
+
+                                    <strong>Interface Web et Backend de stockage</strong>
+                                    <p>
+                                        <code>ui = true</code>
+                                        Active l'interface web de Vault, parce que personne n'a envie de tout faire en
+                                        ligne de commande (même si c'est possible).
+                                    </p>
+
+                                    <strong>Le stockage Consul : Mariage parfait</strong>
+                                    <p>
+                                        <code>storage "consul"</code>
+                                        <span>Vault utilise Consul comme backend de stockage. C'est du
+                                            mariage arrangé qui fonctionne parfaitement : Consul gère la persistance,
+                                            Vault
+                                            gère la sécurité. Pour une solution encore plus simple, il est tout à fait
+                                            possible de se passer complètement de Consul et de configurer Vault pour
+                                            qu'il
+                                            stocke ses données directement sur l'hôte, via un backend comme
+                                            <code>file.</code></span>
+                                    </p>
+
+                                    <strong>Paramètres de stockage Consul :</strong>
+                                    <ul>
+                                        <li><code>address = "consul:8500"</code> Adresse du serveur Consul (nom
+                                            Docker)</li>
+                                        <li><code>path = "vault/"</code> Chemin de stockage dans le KV store
+                                            Consul</li>
+                                        <li><code>scheme = "http"</code> Protocole HTTP (réseau interne sécurisé)
+                                        </li>
+                                        <li><code>session_ttl = "15s"</code> Durée de vie des sessions Consul</li>
+                                        <li><code>lock_wait_time = "15s"</code> Temps d'attente pour les verrous
+                                        </li>
+                                    </ul>
+
+                                    <strong>Listener TCP : L'oreille de Vault</strong>
+                                    <p>
+                                        <code>listener "tcp"</code>
+                                        <span>Configuration du listener HTTP sur le port 8200 avec TLS
+                                            désactivé car géré par le reverse proxy Synology. Le chiffrement ne sera pas
+                                            strictement de bout en bout, puisque c'est le reverse proxy qui termine la
+                                            connexion TLS. Cependant, comme ce proxy est hébergé sur le même hôte que
+                                            Vault,
+                                            le trafic non chiffré entre le proxy et Vault ne transite que sur
+                                            l'interface
+                                            localhost.
+                                        </span>
+                                    </p>
+
+                                    <div class="alert alert-success">
+                                        <strong>🔐 Note de sécurité :</strong>
+                                        <p class="mb-0">Ce compromis est généralement acceptable dans un environnement
+                                            contrôlé, tant que
+                                            l'hôte est correctement sécurisé. Toutefois, pour une configuration de
+                                            production à haute sensibilité, il est recommandé d'activer TLS directement
+                                            dans
+                                            Vault afin d'assurer un chiffrement complet, même en local.
+                                        </p>
+                                    </div>
+
+                                    <div class="alert alert-primary">
+                                        <strong>🧰 Caisse à Outils </strong>
+                                        <p class="mb-0">
+                                            Pour plus de détails sur le fonctionnement du mTLS consultez <a
+                                                href="../tool-box/mtls.html" class="text-decoration-none">l'article
+                                                ici</a>.
+                                        </p>
+                                    </div>
+
+                                    <strong>Configuration X-Forwarded-For :</strong>
+                                    <p>
+                                        Les paramètres <code>x_forwarded_for_*</code> permettent à Vault de récupérer
+                                        les vraies adresses IP des clients qui passent par le reverse proxy. Essentiel
+                                        pour l'audit et la sécurité !
+                                    </p>
+
+
+                                    <strong>Configuration des baux (leases) :</strong>
+                                    <ul>
+                                        <li><code>default_lease_ttl = "168h"</code> 7 jours par défaut pour les
+                                            secrets</li>
+                                        <li><code>max_lease_ttl = "720h"</code> 30 jours maximum, parce qu'il faut
+                                            bien une limite</li>
+                                        <li><code>api_addr = "https://vault.internal"</code> URL publique via le
+                                            reverse proxy</li>
+                                    </ul>
+
+                                    <strong>Logs et monitoring :</strong>
+                                    <p>
+                                        <code>log_level = "INFO"</code> et
+                                        <code>log_format = "standard"</code>
+                                        Configuration optimisée pour Synology avec logs lisibles et niveau d'information
+                                        approprié.
+                                    </p>
+                                    <strong>🔧 Détail technique :</strong>
+                                    <p>
+                                        <code>disable_mlock = false</code>
+                                        <span>
+                                            Active le verrouillage mémoire (<code>mlock</code>) pour éviter que des
+                                            secrets
+                                            ne se retrouvent
+                                            dans le swap. C'est la bonne pratique recommandée par HashiCorp pour une
+                                            instance sérieuse de Vault.
+                                            Par défaut, les containers Docker ne peuvent pas utiliser
+                                            <code>mlock()</code>,
+                                            mais ici on a ajouté
+                                            la capacité <code>IPC_LOCK</code> (merci <code>cap_add</code>), ce qui
+                                            permet à
+                                            Vault de protéger ses
+                                            secrets correctement, même en container.
+                                            Bref, si tu veux dormir tranquille, tu laisses ça à <code>false</code> (oui,
+                                            c'est contre-intuitif,
+                                            mais c'est bien <strong>false</strong> qui signifie : "je <em>n</em>'empêche
+                                            pas
+                                            Vault d'utiliser
+                                            <code>mlock()</code>"). 🛡️
+                                        </span>
+                                    </p>
+
+                                    <p>
+                                        <code>disable_clustering = true</code>
+                                        <span>Désactive le clustering Vault car nous n'avons qu'un seul
+                                            nœud. Simplifie la configuration.</span>
+                                    </p>
+                                    <pre class="bg-dark text-light p-3 rounded mh-100">
+<code class="language-hcl"># Active l'interface web de Vault
+ui = true
+
+# Configuration du backend de stockage Consul
+storage "consul" {
+  # Adresse du serveur Consul
+  address = "consul:8500"
+  # Chemin de stockage dans Consul
+  path    = "vault/"
+  # Protocole (HTTP car réseau interne)
+  scheme  = "http"
+  
+  # Configuration de session Consul
+  # Durée de vie des sessions
+  session_ttl = "15s"
+  # Temps d'attente pour les verrous
+  lock_wait_time = "15s"
+}
+
+# Listener HTTP - TLS géré par le reverse proxy Synology
+listener "tcp" {
+  address     = "0.0.0.0:8200"
+  # TLS désactivé (géré par le reverse proxy)
+  tls_disable = 1
+  
+  # Configuration pour les en-têtes X-Forwarded-For
+  x_forwarded_for_authorized_addrs = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+  x_forwarded_for_hop_skips = 0
+  x_forwarded_for_reject_not_authorized = false
+  x_forwarded_for_reject_not_present = false
+}
+
+# Configuration pour le reverse proxy HTTPS
+# URL publique via reverse proxy
+api_addr = "https://vault.internal"
+disable_clustering = true
+
+# Activer mlock pour éviter le swap sur l'hôte
+disable_mlock = false
+
+# Configuration des logs
+log_level = "INFO"
+# Format lisible pour Synology
+log_format = "standard"
+
+# Configuration des baux (leases)
+# 7 jours par défaut
+default_lease_ttl = "168h"
+# 30 jours maximum
+max_lease_ttl = "720h"</code>
+</pre>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#panelsStayOpen-collapseFive" aria-expanded="false"
+                                    aria-controls="panelsStayOpen-collapseFive">
+                                    <ol class="breadcrumb m-0">
+                                        <li class="breadcrumb-item">secret</li>
+                                        <li class="breadcrumb-item">vault-agent</li>
+                                        <li class="breadcrumb-item">config</li>
+                                        <li class="breadcrumb-item">agent.hcl</li>
+                                    </ol>
+                                </button>
+                            </h3>
+                            <div id="panelsStayOpen-collapseFive" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <strong>Le agent.hcl : Le chef d'orchestre de l'automatisation</strong>
+
+                                    <p>Le <code>agent.hcl</code> configure Vault-Agent, le composant qui transforme
+                                        notre infrastructure en véritable usine à certificats automatisée. C'est lui qui
+                                        se
+                                        connecte à Vault,
+                                        s'authentifie tout seul comme un grand, et génère nos certificats SSL sans
+                                        intervention humaine.</p>
+
+                                    <strong>Configuration de connexion à Vault</strong>
+                                    <p>
+                                        La section <code>vault</code> définit comment l'agent se connecte au serveur
+                                        Vault avec une stratégie de retry robuste (5 tentatives) pour gérer les
+                                        redémarrages et les problèmes réseau temporaires. Chaque tentative est plus
+                                        longue que la précédente afin de laisser le temps au Vault de démarrer.
+                                    </p>
+
+                                    <strong>Authentification automatique :</strong>
+                                    <p>
+                                        <span>L'agent utilise la méthode AppRole pour s'authentifier
+                                            automatiquement auprès de Vault.</span>
+                                    </p>
+
+                                    <div class="alert alert-success">
+                                        <strong>Pourquoi AppRole ?</strong>
+                                        <ul class="mb-0">
+                                            <li><strong>Sécurité :</strong> Les paires sont révocables et assignables à
+                                                des
+                                                politiques de gestion plus fines.</li>
+                                            <li><strong>Automatisation :</strong> Pas besoin d'intervention ou
+                                                d'interaction
+                                                humaine. C'est fait pour les scripts, les jobs ou les agents !</li>
+                                            <li><strong>Rotation :</strong> Les secret_id peuvent être renouvelés
+                                                automatiquement.</li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="alert alert-warning">
+                                        <p class="mb-0">
+                                            <code>remove_secret_id_file_after_reading = false</code>
+                                        </p>
+                                        <span>Cette option importante permet de conserver le secret_id en mémoire afin
+                                            d'éviter des réauthentifications constantes. Dans notre environnement
+                                            Docker,
+                                            cela apporte plus de stabilité. Pas d'inquiétude côté sécurité : notre agent
+                                            ne
+                                            l'utilise que pour récupérer un token, et c'est ce token qui servira ensuite
+                                            à
+                                            toutes les opérations sur les certificats.
+                                        </span>
+                                    </div>
+
+                                    <strong>Template magic :</strong>
+                                    <p>
+                                        La section <code>template</code> est le cœur de l'automatisation. Elle surveille
+                                        le template <code>/vault/templates/cert.tpl</code> et génère automatiquement les
+                                        certificats.
+                                    </p>
+
+                                    <div class="alert alert-info">
+                                        <strong>Important à savoir</strong>
+                                        <ul class="mb-0">
+                                            <li><code>writeToFile</code> écrit systématiquement les fichiers à chaque
+                                                rendu
+                                                du template, <strong>même si le contenu n'a pas changé</strong>.</li>
+                                            <li>Le fichier <code>destination</code> est quant à lui <strong>comparé
+                                                    avant
+                                                    écriture</strong> : Vault Agent ne le réécrit que si son contenu
+                                                diffère
+                                                du précédent.</li>
+                                            <li>Le script <code>command</code> (ex : redémarrage d'un service) est
+                                                déclenché
+                                                <strong>uniquement si le fichier <code>destination</code> est mis à
+                                                    jour</strong>.
+                                            </li>
+                                            <li>C'est pourquoi il est recommandé de regrouper dans un seul fichier
+                                                <code>destination</code> tous les éléments critiques (certificat, clé,
+                                                CA
+                                                concaténés), pour éviter des redémarrages inutiles.
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="alert alert-success">
+                                        <strong>Le workflow automatique</strong>
+                                        <ul class="mb-0">
+                                            <li>
+                                                <strong>Surveillance</strong>
+                                                <span>L'agent surveille en permanence la validité du
+                                                    certificat (en interne).</span>
+                                            </li>
+
+                                            <li>
+                                                <strong>Génération</strong>
+                                                <span>Quand le certificat approche de l'expiration, le
+                                                    template est exécuté (à 90% du TTL ou lors d'un redémarrage de
+                                                    l'agent).</span>
+                                            </li>
+
+                                            <li>
+                                                <strong>Déploiement</strong>
+                                                <span>Le script <code>restart_service.sh</code> est
+                                                    automatiquement exécuté <strong>uniquement si le fichier
+                                                        <code>destination</code> a changé</strong>.<br>
+                                                    Cela évite de redémarrer le service inutilement si seuls les
+                                                    fichiers
+                                                    générés par <code>writeToFile</code> ont été écrits mais sans
+                                                    modification réelle du certificat.
+                                                </span>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="alert alert-info">
+                                        <strong>Pro tip</strong>
+                                        <p>Il est tout à fait possible de définir plusieurs sections template dans le
+                                            fichier de configuration de Vault-Agent. Chacune peut cibler un certificat
+                                            différent, un chemin spécifique dans Vault, et avoir son propre script de
+                                            démarrage (<code>command</code>) associé.</p>
+                                        <p class="mb-0">
+                                            Cela te permet de générer autant de certificats que nécessaire, chacun avec
+                                            des
+                                            paramètres distincts (chemins, rôles, SAN, TTL, etc.). C'est
+                                            particulièrement
+                                            utile si tu dois équiper plusieurs services, applications ou interfaces
+                                            réseau
+                                            avec des certificats différents, tout en gardant une configuration
+                                            centralisée
+                                            et cohérente.
+                                        </p>
+                                    </div>
+                                    <div class="alert alert-info">
+                                        <p class="mb-0">
+                                            <strong>Astuce supplémentaire</strong><br>
+                                            Si tu utilises plusieurs templates avec chacun leur propre
+                                            <code>destination</code> et <code>command</code>, veille à bien gérer
+                                            l'ordre
+                                            des redémarrages pour éviter des interruptions partielles ou en double.
+                                        </p>
+                                    </div>
+
+                                    <strong>🔧 Détail technique :</strong>
+                                    <p>
+                                        <code>disable_mlock = false</code>
+                                        <span>
+                                            Active le verrouillage mémoire (<code>mlock</code>) pour éviter que des
+                                            secrets
+                                            ne se retrouvent
+                                            dans le swap. C'est la bonne pratique recommandée par HashiCorp pour une
+                                            instance sérieuse de Vault.
+                                            Par défaut, les containers Docker ne peuvent pas utiliser
+                                            <code>mlock()</code>,
+                                            mais ici on a ajouté
+                                            la capacité <code>IPC_LOCK</code> (merci <code>cap_add</code>), ce qui
+                                            permet à
+                                            Vault de protéger ses
+                                            secrets correctement, même en container.
+                                            Bref, si tu veux dormir tranquille, tu laisses ça à <code>false</code> (oui,
+                                            c'est contre-intuitif,
+                                            mais c'est bien <strong>false</strong> qui signifie : "je <em>n</em>'empêche
+                                            pas
+                                            Vault d'utiliser
+                                            <code>mlock()</code>"). 🛡️
+                                        </span>
+                                    </p>
+
+                                    <p>En résumé, ce fichier transforme Vault-Agent en véritable assistant personnel qui
+                                        gère tout le cycle de vie des certificats SSL : authentification, génération,
+                                        déploiement et redémarrage des services. Plus besoin de se lever à 3h du matin
+                                        parce
+                                        qu'un certificat a expiré !</p>
+
+                                    <pre class="bg-dark text-light p-3 rounded mh-100"><code class="language-hcl"># Configuration de connexion à Vault
+vault {
+  address = "http://vault:8200"
+  retry {
+    # Nombre de tentatives de reconnexion
+    num_retries = 5
+  }
+}
+
+# Authentification automatique via AppRole
+auto_auth {
+  method "approle" {
+    mount_path = "auth/approle"
+    config = {
+      # Fichiers contenant les identifiants AppRole
+      role_id_file_path   = "/run/secrets/vault_role_id"
+      secret_id_file_path = "/run/secrets/vault_secret_id"
+      # Garde le secret_id pour éviter les re-authentifications
+      remove_secret_id_file_after_reading = false
+    }
+  }
+}
+
+# Activer mlock pour éviter le swap sur l'hôte
+disable_mlock = true
+
+# Template pour générer les certificats SSL
+template {
+  # Template source
+  source      = "/vault/templates/cert.tpl"
+  # Fichier de sortie
+  destination = "/certs/myCert/all-certs"
+  # Script post-génération
+  command     = "/bin/sh /vault/config/restart_service.sh"
+}
+</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h3 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#panelsStayOpen-collapseSix" aria-expanded="false"
+                                    aria-controls="panelsStayOpen-collapseSix">
+                                    <ol class="breadcrumb m-0">
+                                        <li class="breadcrumb-item">secret</li>
+                                        <li class="breadcrumb-item">vault-agent</li>
+                                        <li class="breadcrumb-item">config</li>
+                                        <li class="breadcrumb-item">restart_service.sh</li>
+                                    </ol>
+                                </button>
+                            </h3>
+                            <div id="panelsStayOpen-collapseSix" class="accordion-collapse collapse">
+                                <div class="accordion-body">
+                                    <strong>Le <code>restart_service.sh</code> : Quand Docker rencontre
+                                        Synology</strong>
+
+                                    <p>Le script <code>restart_service.sh</code> fait le lien entre notre conteneur
+                                        Vault
+                                        Agent
+                                        et le système hôte Synology. Il permet de redémarrer nginx (ou d'autres
+                                        services)
+                                        automatiquement après la mise à jour des certificats, évitant ainsi toute
+                                        intervention manuelle.</p>
+
+                                    <div class="alert alert-info">
+                                        <strong>Le défi technique :</strong>
+                                        <p class="mb-0">Comment redémarrer un service système depuis un conteneur Docker
+                                            ?
+                                            La solution repose sur :</p>
+                                        <ul>
+                                            <li><code>chroot</code> pour basculer la racine du système de fichiers vers
+                                                le
+                                                système hôte</li>
+                                            <li>Un volume Docker <code>/:/host:ro</code> monté en lecture seule,
+                                                exposant le
+                                                système Synology à l'intérieur du conteneur</li>
+                                        </ul>
+                                        <p><code>chroot /host</code> « maquille » le conteneur en système hôte, lui
+                                            permettant d'exécuter les commandes système du Synology.</p>
+                                        <p class="mb-0">La commande <code>synosystemctl restart nginx</code> est
+                                            spécifique au DSM de
+                                            Synology : c'est l'équivalent de <code>systemctl</code> sur Linux classique.
+                                        </p>
+                                    </div>
+
+                                    <div class="alert alert-success">
+                                        <strong>Pourquoi cette approche ?</strong>
+                                        <ul class="mb-0 mt-2">
+                                            <li><strong>Sécurité :</strong> Le volume est monté en lecture seule
+                                                (<code>:ro</code>) pour limiter les risques</li>
+                                            <li><strong>Isolation :</strong> Le conteneur n'a accès qu'à ce dont il a
+                                                besoin
+                                            </li>
+                                            <li><strong>Automatisation :</strong> Le redémarrage se fait sans
+                                                intervention
+                                                humaine</li>
+                                            <li><strong>Simplicité :</strong> Pas besoin de services additionnels ou de
+                                                mécanismes complexes de communication inter-processus</li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="alert alert-warning">
+                                        <strong>⚠️ Prérequis importants :</strong>
+                                        <p class="mb-0">
+                                            Pour que <code>chroot</code> fonctionne correctement, le conteneur Vault
+                                            Agent
+                                            doit être lancé avec l'utilisateur <code>root</code> et la capability
+                                            <code>SYS_CHROOT</code> activée.
+                                            <br>
+                                            Vérifie aussi que le montage du volume vers <code>/host</code> est
+                                            correctement
+                                            configuré.
+                                        </p>
+                                    </div>
+
+                                    <div class="alert alert-secondary">
+                                        <p><strong>🔧 Alternatives possibles :</strong></p>
+                                        <strong>Redémarrage manuel</strong>
+                                        <ul>
+                                            <li>Nécessite une intervention humaine</li>
+                                            <li>Peu adapté à l'automatisation</li>
+                                        </ul>
+
+                                        <strong>Fichier de signal sur volume partagé</strong>
+                                        <ul>
+                                            <li>Un fichier flag écrit par le conteneur, surveillé par un cron ou un
+                                                service
+                                                hôte</li>
+                                            <li>Complexité et risques d'incohérence liés à la synchronisation</li>
+                                        </ul>
+
+                                        <strong>Communication via socket Unix ou API</strong>
+                                        <ul class=" mb-0">
+                                            <li>Implique un processus écouteur sur l'hôte</li>
+                                            <li>Complexité accrue de mise en place</li>
+                                        </ul>
+                                    </div>
+
+                                    <p>En résumé, ce script court et simple est une solution pragmatique et efficace
+                                        pour
+                                        relier Vault Agent et la gestion des services système sous Synology.</p>
+
+                                    <pre class="bg-dark text-light p-3 rounded mh-100">
+<code class="language-shell">#!/bin/bash
+
+# Script de redémarrage automatique des services après mise à jour des certificats
+# Utilisé par Vault Agent via la directive `command` dans le template
+
+set -euo pipefail
+
+NGINX_RESTART_CMD="chroot /host /usr/syno/bin/synosystemctl restart nginx"
+
+echo "Certificates deployed"
+
+echo "Restarting nginx..."
+if $NGINX_RESTART_CMD; then
+   echo "Nginx restarted successfully"
+else
+   echo "Error while restarting nginx"
+   exit 1
+fi
+
+echo "Deployment completed successfully"</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <div class="accordion-item">
+                                <h3 class="accordion-header">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                        data-bs-target="#panelsStayOpen-collapseSeven" aria-expanded="false"
+                                        aria-controls="panelsStayOpen-collapseSeven">
+                                        <ol class="breadcrumb m-0">
+                                            <li class="breadcrumb-item">secret</li>
+                                            <li class="breadcrumb-item">vault-agent</li>
+                                            <li class="breadcrumb-item">templates</li>
+                                            <li class="breadcrumb-item">cert.tpl</li>
+                                        </ol>
+                                    </button>
+                                </h3>
+                                <div id="panelsStayOpen-collapseSeven" class="accordion-collapse collapse">
+                                    <div class="accordion-body">
+                                        <strong>Le cert.tpl : La magie des templates Vault-Agent</strong>
+
+                                        <p>Ce template est le cœur de notre système de génération automatique de
+                                            certificats. Il
+                                            utilise la syntaxe des templates Vault-Agent pour générer des certificats
+                                            SSL/TLS et
+                                            les déployer automatiquement dans l'architecture Synology.</p>
+
+                                        <strong>Anatomie du template :</strong>
+                                        <p>
+                                            Le template utilise la fonction <code>pkiCert</code> de Vault-Agent pour
+                                            générer
+                                            un certificat via l'API PKI de Vault (que l'on va créer en Phase 3), puis
+                                            déploie les différents composants
+                                            dans les fichiers requis par Synology. Tu peux écrire tous les certificats
+                                            que
+                                            tu souhaites et même faire plusieurs templates du moment qu'ils sont
+                                            déclarés
+                                            dans
+                                            le <code>agent.hcl</code>.
+                                        </p>
+
+                                        <p>
+                                            <strong>Paramètres de génération du certificat :</strong>
+                                        <ul class="mb-0 mt-2">
+                                            <li><code>pki/issue/internal-server</code> : Chemin
+                                                vers le rôle PKI configuré dans Vault.</li>
+                                            <li><code>common_name=nas.internal</code> : Nom
+                                                principal du certificat (CN).</li>
+                                            <li><code>alt_names=consul.internal,vault.internal</code>
+                                                : Noms alternatifs (SAN).</li>
+                                            <li><code>ttl=2160h</code> : Durée de vie du certificat
+                                                (90 jours).</li>
+                                        </ul>
+                                        </p>
+
+                                        <div class="alert alert-warning">
+                                            <code>{{ .Cert }}{{ .CA }}{{ .Key }}</code>
+                                            <p>
+                                                Cette ligne concatène la clé privée, le certificat et la chaîne
+                                                d'autorité
+                                                dans un seul fichier nommé <code>all-certs</code>, utilisé par Vault
+                                                Agent pour suivre l'état du certificat.
+                                            </p>
+                                            <p class="mb-0">
+                                                Supprimer ce fichier sur l'hôte ne force pas automatiquement un
+                                                renouvellement immédiat. Toutefois, cette suppression peut être détectée
+                                                par
+                                                Vault Agent si celui-ci est redémarré ou si son cache local est effacé,
+                                                ce
+                                                qui déclenche alors la régénération des certificats. Cette manipulation
+                                                est
+                                                utile si tu souhaites appliquer des modifications comme ajouter des SAN,
+                                                changer la durée de vie (TTL) ou modifier d'autres paramètres du
+                                                certificat.
+                                            </p>
+                                        </div>
+
+                                        <strong>Déploiement automatique des fichiers :</strong>
+                                        <p>
+                                            Le template utilise la fonction <code>writeToFile</code> pour créer
+                                            automatiquement les fichiers nécessaires avec les bonnes permissions dans
+                                            l'archive des certificats Synology.
+                                        </p>
+
+                                        <div class="alert alert-success">
+                                            <strong>Structure des fichiers générés :</strong>
+                                            <ul class="mb-0 mt-2">
+                                                <li><code>privkey.pem</code> : Clé privée (permissions 0600,
+                                                    propriétaire
+                                                    root :
+                                                    format attendu par Synology)
+                                                </li>
+                                                <li><code>cert.pem</code> : Certificat seul (permissions 0644,
+                                                    propriétaire
+                                                    root : format attendu par Synology)</li>
+                                                <li><code>fullchain.pem</code> : Certificat + CA (permissions 0644,
+                                                    propriétaire
+                                                    root : format attendu par Synology)</li>
+                                                <li><code>all-certs</code> : Fichier principal contenant tout (format
+                                                    attendu
+                                                    par Vault)</li>
+                                            </ul>
+                                        </div>
+
+                                        <div class="alert alert-info">
+                                            <strong>🔄 Processus automatique :</strong>
+                                            <p class="mb-0">
+                                                À chaque exécution du template (renouvellement du certificat),
+                                                Vault-Agent
+                                                génère
+                                                un nouveau certificat, l'écrit dans les fichiers appropriés, puis
+                                                déclenche
+                                                le
+                                                script <code>restart_service.sh</code> pour redémarrer nginx et
+                                                appliquer
+                                                les
+                                                nouveaux certificats.
+                                            </p>
+                                        </div>
+
+                                        <p>Ce template illustre parfaitement la puissance de Vault-Agent : une seule
+                                            configuration qui gère génération, déploiement et rechargement automatique
+                                            des
+                                            certificats. Plus besoin de se soucier des renouvellements manuels !</p>
+                                        <pre class="bg-dark text-light p-3 rounded mh-100">
+<code class="language-hcl">{{- with pkiCert "pki/issue/internal-server" "common_name=nas.internal" "alt_names=consul.internal,vault.internal" "ttl=2160h" -}}
+{{ .Cert }}{{ .CA }}{{ .Key }}
+{{- .Key | writeToFile "/certs/myCert/privkey.pem" "root" "root" "0600" -}}
+{{- .Cert | writeToFile "/certs/myCert/cert.pem" "root" "root" "0644" -}}
+{{- .Cert | writeToFile "/certs/myCert/fullchain.pem" "root" "root" "0644" -}}
+{{- .CA | writeToFile "/certs/myCert/fullchain.pem" "root" "root" "0644" "append" -}}
+{{- end -}}</code></pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+
+                        <p class="pt-3">
+                            Maintenant, on va déployer notre première stack, celle qui contient Consul et Vault.
+                            En effet, on travaille avec <strong>deux fichiers docker-compose.yml distincts</strong>,
+                            donc deux stacks séparées :
+                        <ul>
+                            <li><code>swarm_consul_vault.yml</code> pour Consul et Vault</li>
+                            <li><code>swarm_vault_agent.yml</code> pour le Vault-agent</li>
+                        </ul>
+                        Pour le moment, on ne va lancer que la première stack, car le Vault-agent bloquerait sur
+                        l'authentification sans identifiants.
+                        </p>
+
+                        <pre class="bg-dark text-light p-3 rounded"><code class="language-bash"># Avant de déployer, il va nous falloir un reseau
+docker network create --driver overlay --attachable --scope swarm secret
+
+# On va également avoir besoin du hash d'une clef de chiffrement symétrique de 32 bytes pour Consul 
+KEY=$(openssl rand -base64 32); echo "Generated key: $KEY"; echo "$KEY" | docker secret create consul_encrypt_key -
+
+# Vérification des secrets
+docker secret ls
+
+# Déploiement de la première stack (Consul + Vault)
+docker stack deploy -c /volume1/docker/secret/swarm_consul_vault.yml secret
+
+# Vérification que tout est bien déployé
+docker stack services secret
+</code></pre>
+
+                        <div class="alert alert-info mt-3">
+                            <strong>Pro tip :</strong>
+                            <p class="mb-0">
+                                Les secrets Docker sont chiffrés au repos et ne sont accessibles qu'aux services
+                                autorisés. C'est bien mieux que des fichiers .env qui traînent partout !
+                            </p>
+                        </div>
+                        <div class="alert alert-info mt-3">
+                            <strong>Note</strong>
+                            <p>
+                                Je n'ai malheureusement pas encore trouvé comment chiffrer le flux réseau entre les
+                                composants dans le docker de Synology.
+                                Ajouter cette option dans la création du réseau semble bloquer le déploiement des conteneurs — probablement
+                                à cause d'un droit manquant au niveau du noyau, ou un autre mécanisme de sécurité
+                                interne.
+                            </p>
+                            <p>
+                                Bref, ça ne fonctionne pas pour le moment.
+                            </p>
+                            <p class="mb-0">
+                                Donc, si tu as besoin d'augmenter la sécurité, je te conseille de configurer un mTLS
+                                (mutual TLS) pour chiffrer la communication entre tes conteneurs,
+                                soit via un proxy type Traefik, soit directement en configurant des certificats dans tes
+                                services.
+                                Mais ça dépasse le cadre de cet article.
+                            </p>
+                        </div>
+
+                        <div class="alert alert-warning mt-3">
+                            <strong>Attention, à la clef !</strong>
+                            <p>La clé de Consul (aka la clé gossip) n'est pas critique à mort, puisqu'elle ne sert
+                                qu'à chiffrer les communications entre les nœuds Consul. Pas touche aux données
+                                elles-mêmes, donc pas de panique côté secrets ou KV.</p>
+                            <p>Théoriquement, tu peux la remplacer si tu l'as perdu — mais bon, c'est la galère :
+                                chaque nœud doit connaître la nouvelle clé, il faut gérer une période où nœuds
+                                supportent l'ancienne et la nouvelle (mode double clé, ambiance “team building”), et
+                                une mauvaise manip peut carrément éclater ton cluster en plusieurs morceaux. Bref,
+                                tu m'as compris...</p>
+                            <p class="mb-0"> Moralité : garde-la bien précieusement dans un coin. Je me suis même
+                                cassé le dos à t'écrire une commande qui te l'affiche, alors profites-en bien !</p>
+                        </div>
+
+                        <p class="mt-3">
+                            Si tout va bien, tu devrais voir 2 services dans cette première stack : consul et vault.
+                            Souvient toi, le Vault-agent, lui n'est pas lancé pour le moment car il a besoin de Vault configuré pour s'authentifier.
+                        </p>
+                        <p class="mb-0">
+                            Cette gestion en deux stacks séparées n'est pas très pratique, mais Swarm ne permet pas
+                            de sélectionner les services à déployer dans une stack unique.
+                            C'est la solution la plus propre pour avancer sereinement : d'abord déployer ce qui
+                            fonctionne, puis, une fois les identifiants prêts, déployer la deuxième stack pour le
+                            Vault-agent.
+                        </p>
+    </section>
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-cogs"></i> Étape 3 : Initialisation de Vault</h5>
+            </div>
+            <div class="card-body">
+                <p>Là, c'est le moment crucial. Vault est démarré mais pas
+                    encore initialisé. On va créer les clés de chiffrement et le
+                    token root :</p>
+
+                <pre class="bg-dark text-light p-3 rounded">
+<code class="language-bash"># Initialisation de Vault (à faire une seule fois !)
+docker exec -it $(docker ps -qf "name=secret_vault.1") vault operator init</code></pre>
+
+                <div class="alert alert-danger mt-3 mb-0">
+
+                    <h3><i class="fas fa-skull-crossbones"></i> ULTRA IMPORTANT !</h3>
+                    <p>Cette commande va afficher 5 clés de déchiffrement et 1
+                        token root. <strong>SAUVEGARDE TOUT ÇA DANS UN ENDROIT
+                            SÛR !</strong> Si tu perds ces clés, tu peux dire
+                        adieu à toutes tes données Vault. Sérieusement, pas de
+                        blague. Ce n'est pas la même chose que la clef de Consul là.</p>
+                    <p class="mb-0">Moi je les mets dans mon gestionnaire de
+                        mots de passe, certains les impriment et les mettent
+                        dans un coffre. À toi de voir, mais <strong>NE LES PERDS
+                            PAS</strong> !
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-key"></i> Étape 4 : Vérification Consul et Vault</h5>
+            </div>
+            <div class="card-body">
+                <p>Avant d'aller plus loin, il est temps de vérifier que Consul et Vault
+                    ont démarré correctement et communiquent l'un avec l'autre, sinon la
+                    suite ne sert à rien vu qu'on va s'appuyer dessus. Comme dit le
+                    proverbe du dev : "mieux vaut vérifier deux fois que débugger toute
+                    la nuit" 😅</p>
+                <p>On va donc faire un petit check-up de nos services, histoire de
+                    s'assurer que tout ce beau monde se parle correctement avant de
+                    passer aux choses sérieuses.</p>
+                <p>Pour commencer, vérifions que Consul dans son coin est OK. Il suffit
+                    d'aller sur http://__NAS_IP__:8500 (oui, encore une interface web,
+                    je sais, on dirait que tout passe par le browser maintenant...)</p>
+                <img class="mx-auto img-fluid d-block" src="../../assets/images/synology-vault/consul-ready.png"
+                    alt="consul doit afficher status ready">
+                <div class="alert alert-info mt-3">
+                    <strong>Pro tip :</strong>
+                    <p class="mb-0">
+                        Si ça mouline trop longtemps, c'est soit
+                        que le service n'est pas encore complètement démarré (patience,
+                        jeune padawan), soit qu'il y a un souci d'initialisation. Dans ce
+                        cas, un petit <code>docker logs consul</code> peut t'éclairer sur ce
+                        qui foire.
+                    </p>
+                </div>
+                <p class=" mt-3">Ton interface devrait t'afficher ton (tes ?)
+                    nœud(s) de Consul avec un petit <span class="badge text-bg-success me-1 align-middle">Active
+                        voter</span>. Si tu vois ça, c'est que Consul a bien pris ses
+                    responsabilités de leader du cluster (même si on n'a qu'un seul
+                    nœud, il faut bien quelqu'un pour commander !)</p>
+                <p>Si c'est le cas, félicitations, c'est que ça tourne !</p>
+                <p class="mt-3">Ensuite on va vérifier l'état de la communication entre
+                    le Vault et le Consul, pour ce faire clique sur ton serveur
+                    "synology-01-consul". C'est là que ça devient intéressant, on va
+                    voir si nos deux services se parlent comme de vieux copains ou s'ils
+                    se boudent encore...</p>
+                <img class="mx-auto img-fluid d-block" src="../../assets/images/synology-vault/consul-vault-seal.png"
+                    alt="consul est healthy mais vault est scellé">
+                <p class="mt-3">Et là, surprise ! Tu noteras le Vault Sealed Status
+                    au-dessus du HealthCheck du Consul. Un beau rouge bien visible,
+                    impossible de le louper !</p>
+                <p>C'est tout à fait normal et attendu, on vient à peine de créer le
+                    Vault qui est scellé pour le moment. D'où le pavé rouge du dessus où
+                    j'ai bien bien BIEN insisté pour que tu conserves les 5 clés que
+                    l'initialisation t'a générées. J'espère que tu ne les as pas perdues
+                    dans un coin de ton bureau ou pire, dans un fichier texte nommé
+                    "passwords.txt" sur le bureau... 😱</p>
+                <div class="alert alert-warning">
+                    <strong>Point d'attention sur le seal</strong>
+                    <p>À chaque fois que le service détectera le moindre truc, le Vault
+                        se mettra en "sécurité". C'est comme un chien de garde numérique
+                        qui se réveille dès qu'il entend du bruit !</p>
+                    <p>C'est son mécanisme pour protéger tes secrets, c'est très bien
+                        comme ça mais cela nécessitera que tu viennes toi-même le
+                        déverrouiller. Oui, c'est chiant, mais c'est le prix de la
+                        sécurité !</p>
+                    <p>Sache enfin que le verrouillage n'est pas qu'esthétique, il
+                        bloque complètement les accès. Tant que tu ne le débloques pas,
+                        c'est comme coffre-fort fermé : impossible de récupérer ou
+                        déposer quoi que ce soit dedans ! Même les applications qui
+                        essaient d'accéder aux secrets vont se prendre un beau "403
+                        Forbidden".</p>
+                    <strong>En gros :</strong>
+                    <p class="mb-0">Redémarrage = Vault
+                        scellé = Toi qui dois te lever pour le déverrouiller. C'est le
+                        côté moins fun de la sécurité...
+                    </p>
+                </div>
+                <p class="mt-3">Avant de quitter l'interface Consul, si tu vas dans la
+                    section Key/Value tu devrais voir une entrée "vault" apparaître.
+                    C'est le moment "aha !" où tu réalises que tout commence à bien
+                    communiquer !</p>
+                <img class="mx-auto img-fluid d-block" src="../../assets/images/synology-vault/consul-vault-data.png"
+                    alt="consul doit afficher le volume vault">
+                <p class="mt-3">Oui c'est en effet là que Vault va venir écrire tout son
+                    fourbi ! C'est un peu pour ça qu'on a installé Consul d'ailleurs,
+                    histoire que les données ne se baladent pas sur un disque en vrac.
+                    Consul fait office de backend de stockage distribué, bien plus
+                    classe qu'un simple fichier JSON qui traîne...</p>
+                <div class="alert alert-info mt-3">
+                    <strong>Fun fact :</strong>
+                    <p class="mb-0">
+                        Si tu regardes bien, tu verras que Vault stocke ses données sous forme de
+                        clés-valeurs dans Consul. C'est du JSON encodé, mais heureusement on
+                        n'aura jamais à triturer ça à la main (ouf !). De toute façon si tu
+                        t'amuses à aller voir dedans, tout est chiffré et donc illisible !
+                        Eh oui, c'est à ça que vont servir les clés, à déchiffrer le tout !
+                    </p>
+                </div>
+                <p class="mt-3">Maintenant, il est temps de déverrouiller (enfin !) le
+                    Vault, sans quoi comme on ne peut pas y accéder on ne pourra ni lire
+                    ni écrire dedans. Direction http://__NAS_IP__:8200. Tu devrais voir
+                    une interface dans le genre :
+                </p>
+                <div class="alert alert-warning">
+                    <strong>Note : </strong>
+                    <p class="mb-0">Si l'interface met du temps à charger, c'est normal,
+                        Vault prend son temps pour s'assurer que tout est sécurisé. La
+                        paranoia, c'est son truc !</p>
+                </div>
+                <img class="mx-auto img-fluid d-block" src="../../assets/images/synology-vault/vault-seal.png"
+                    alt="consul doit afficher le volume vault">
+                <p>Là il va te falloir rentrer 3 des 5 clés qu'il nous a générées à
+                    l'étape précédente. Peu importe lesquelles du moment que les 3 sont
+                    différentes ! C'est le moment de sortir ton petit carnet secret (ou
+                    ton gestionnaire de mots de passe, soyons modernes).</p>
+                <div class="alert alert-info mt-3">
+                    <strong>Explication technique (pour les curieux) :</strong>
+                    <p class="mb-0">
+                        En fait Vault utilise le 🔐 Shamir's Secret Sharing qui permet de
+                        "diviser un secret (comme une clé maîtresse de chiffrement) en
+                        plusieurs parts, appelées shares, et définir un seuil minimal de
+                        parts à réunir pour reconstituer le secret."
+                        Bref comme on dit dans le milieu : cherche pas, c'est magique mais
+                        c'est bien pratique pour par exemple séparer ta clé sur plusieurs
+                        personnes de confiance et qu'une seule ne soit pas capable de
+                        déverrouiller seule les infos en cas de pépins :D
+                    </p>
+                </div>
+                <div class="alert alert-info mt-3"><strong>En pratique :</strong>
+                    <p class="mb-0">
+                        On a 5 clés, il en faut 3 pour déverrouiller. Donc même si tu perds 2 clés,
+                        tu peux encore accéder à tes secrets. Mais si tu en perds 3... ben
+                        c'est mort, il faudra tout réinitialiser (et dire au revoir à tes
+                        données). D'où l'importance de bien les sauvegarder !
+                    </p>
+                </div>
+                <div class="alert alert-info mt-3">
+                    <strong>Note : </strong>
+                    <p class="mb-0">
+                        Pas besoin que tout le monde fasse la queue derrière le même
+                        ordinateur avec son petit papier si les clés sont réparties entre
+                        plusieurs personnes. Chacun(e) peut les saisir depuis son propre poste !
+                    </p>
+                </div>
+                <p class="mt-3">Une fois déverrouillé, le Vault te demandera ta clé
+                    root. Forcément on n'a que ce seul token de connexion possible pour
+                    l'instant mais on va y remédier ! Cette clé root, c'est un peu comme
+                    le compte administrateur ultime : elle peut tout faire, alors on va
+                    vite créer des comptes plus limités par la suite.</p>
+                <div class="alert alert-warning my-3">
+                    <strong>Rappel important :</strong>
+                    <p class="mb-0">
+                        Cette clé root, c'est celle qui était affichée lors
+                        de l'initialisation, pas les 5 clés de déverrouillage. Si tu l'as
+                        perdue... ben tu recommences tout depuis le début mais bon je
+                        l'avais écrit en rouge, c'etait pas pour rien !
+                    </p>
+                </div>
+                <p>Normalement à ce stade tu devrais voir l'interface du Vault (presque)
+                    vide. C'est normal, on vient de naître dans l'écosystème Vault, il
+                    n'y a encore rien dedans ! C'est comme un frigo neuf : il faut le
+                    remplir maintenant.</p>
+                <p>L'interface est plutôt clean, HashiCorp a fait du bon boulot sur
+                    l'UX. Tu vas voir, c'est bien plus user-friendly qu'on pourrait s'y
+                    attendre pour un outil de sécurité enterprise.</p>
+                <p>Si tu retournes sur celle du Consul là où on avait le
+                    status du Vault Seal, tu ne devrais plus le voir en rouge mais comme
+                    ça :</p>
+
+                <img class="mx-auto img-fluid d-block" src="../../assets/images/synology-vault/consul-vault-ready.png"
+                    alt="consul doit afficher le volume vault">
+                <div class="alert alert-success my-3">
+                    <strong>Moment de vérité :</strong>
+                    <p class="mb-0">
+                        Si tout est vert, c'est que ton installation de
+                        Consul et de Vault est opérationnelle ! 🎉
+                    </p>
+                </div>
+                <p>Tu as maintenant une base solide pour gérer tes secrets de manière
+                    professionnelle. Consul stocke tout ça proprement, Vault chiffre et
+                    sécurise, et toi tu peux dormir tranquille en sachant que tes mots
+                    de passe ne traînent plus dans des fichiers texte un peu partout.
+                </p>
+                <div class="alert alert-success mb-0">
+                    <strong>🎯 Récap de ce qu'on a accompli :</strong>
+                    <ul class="mb-0">
+                        <li>✅ Consul est up and running, prêt à stocker nos données</li>
+                        <li>✅ Vault communique avec Consul (ils sont copains maintenant)
+                        </li>
+                        <li>✅ Le processus de déverrouillage fonctionne (tes clés sont
+                            bonnes !)</li>
+                        <li>✅ L'interface web répond correctement</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2 class="pb-3 pt-2">🔧 Phase 2 : Configuration de Vault (le fun
+            commence)</h2>
+
+        <p>Maintenant qu'on a un Vault initialisé, on va le configurer pour
+            qu'il devienne notre petite PKI personnelle. C'est là que ça devient
+            intéressant !</p>
+    </section>
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-network-wired"></i> Étape 1 : Configuration DNS</h5>
+            </div>
+            <div class="card-body">
+                <p>Avant tout, il faut créer des entrées DNS pour nos services.
+                    Va dans ton routeur (ou ton serveur DNS) et ajoute :</p>
+
+                <ul>
+                    <li><code>vault.internal</code> → IP de ton Synology</li>
+                    <li><code>consul.internal</code> → IP de ton Synology</li>
+                </ul>
+
+                <p>Ensuite, on n'oublie pas d'aller configurer le reverse-proxy (celui du Synology dans mon cas) pour
+                    faire pointer nos FQDN tout frais en HTTPS dans :
+                    <br /><code>Panneau de configuration > Portail de connexion > Avancé > Proxy inversé</code>.
+                    <br />Chez moi, ça donne ça.
+                </p>
+
+                <div class="d-flex flex-column flex-lg-row justify-content-center gap-3">
+                    <div class="flex-fill">
+                        <img class="w-100 img-fluid" src="../../assets/images/synology-vault/consul-https.png"
+                            alt="reverse proxy consul">
+                    </div>
+                    <div class="flex-fill">
+                        <img class="w-100 img-fluid" src="../../assets/images/synology-vault/vault-https.png"
+                            alt="reverse proxy vault">
+                    </div>
+                </div>
+
+                <p class="mt-3">Puis, il va te falloir installer le CLI Vault sur ta
+                    machine (pas sur le NAS, le système n'est pas standard tu ne pourras
+                    pas le faire).</p>
+                <a href="https://developer.hashicorp.com/vault/install" class="link-primary">Documentation
+                    officielle pour installer le
+                    CLI</a>
+                <div class="alert alert-info mt-3">
+                    <strong>Explication :</strong>
+                    <p class="mb-0">
+                        L'interface Web ne
+                        permet pas de générer le type d'identifiant dont on va avoir besoin, c'est pour ça que l'on
+                        installe le CLI.
+                    </p>
+                </div>
+                <p class="mt-3">Une fois que c'est fait, tu peux te connecter à Vault
+                    via le CLI depuis ta machine:</p>
+
+                <pre class="bg-dark text-light p-3 rounded">
+<code class="language-bash"># Configuration de l'adresse Vault
+export VAULT_ADDR="https://vault.internal" 
+
+# On ignore le self-signed certificat pour la configuration
+export VAULT_SKIP_VERIFY=true 
+
+# Connexion avec le token root
+vault login
+# Colle ton token root ici</code></pre>
+
+                <div class="alert alert-primary mt-3 mb-0">
+                    <strong>🧰 Caisse à Outils </strong>
+                    <p class="mb-0">
+                        Pour plus de détails sur le fonctionnement des reverses proxy consultez <a
+                            href="../tool-box/reverse-proxy.html" class="text-decoration-none">l'article ici</a>.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-user-secret"></i> Étape 2 : Configuration AppRole</h5>
+            </div>
+            <div class="card-body">
+                <p>AppRole, c'est le système d'authentification qu'on va
+                    utiliser pour que Vault-Agent puisse se connecter à Vault
+                    automatiquement. C'est comme un couple login/password, mais
+                    en plus sécurisé.</p>
+
+                <pre class="bg-dark text-light p-3 rounded">
+<code class="language-bash"># Activation de l'authentification AppRole
+vault auth enable approle
+
+# Création du rôle pour vault-agent
+vault write auth/approle/role/vault-agent \
+    token_ttl=24h \
+    token_max_ttl=72h \
+    secret_id_ttl=0 \
+    secret_id_num_uses=0 \
+    bind_secret_id=true \
+    policies=vault-agent-policy</code></pre>
+
+                <p class="mt-3">Ensuite, on récupère les identifiants (c'est ça
+                    qu'on va mettre dans nos secrets Docker pour le Vault-Agent avec de vrai valeurs
+                    d'authentification cette fois) :</p>
+
+                <pre class="bg-dark text-light p-3 mb-3 rounded">
+<code class="language-bash"># Création des secrets pour l'authentification (sur ton PC qui à Vault CLI)
+
+# Récupération du role_id (c'est comme un username)
+vault read -field=role_id auth/approle/role/vault-agent/role-id
+
+# Génération d'un secret_id (c'est comme un password)
+vault write -f -field=secret_id auth/approle/role/vault-agent/secret-id
+</code></pre>
+
+                <pre class="bg-dark text-light p-3 rounded">
+<code class="language-bash"># Enregistrement des secrets pour l'authentification (sur ton NAS qui à Docker)
+echo "_ROLE_ID_" | docker secret create vault_role_id -
+echo "_SECRET_ID_" | docker secret create vault_secret_id -
+</code></pre>
+                <div class="alert alert-info mt-3 mb-0">
+                    <strong>Explication :</strong>
+                    <p>Le role_id est fixe et
+                        peut être réutilisé. Le secret_id est unique et peut
+                        être régénéré. C'est ce couple qui permet à Vault-Agent
+                        de s'authentifier.</p>
+                    <p>Dans notre configuration, on a choisi que le <strong>secret_id
+                            n'a pas de TTL</strong> (<code>secret_id_ttl=0</code>). En
+                        clair, le Vault-agent utilise le couple
+                        <code>role_id + secret_id</code> pour générer un token
+                        d'authentification, qu'il va ensuite rafraîchir toutes les 24
+                        heures, avec une tolérance maximale de 72 heures
+                        (<code>token_ttl=24h</code> et <code>token_max_ttl=72h</code>).
+                    </p>
+                    <p>Si on avait donné un TTL au secret_id, ça voudrait dire qu'il
+                        expire au bout d'un certain temps. Du coup, il faudrait arrêter
+                        l'agent, générer un nouveau secret_id manuellement, le déployer
+                        sur <strong>toutes</strong> les machines, puis redémarrer
+                        l'agent partout… Autant dire une galère sans fin, pas très
+                        pratique ni scalable !</p>
+                    <p class="mb-0">Avec <code>secret_id_ttl=0</code> et
+                        <code>secret_id_num_uses=0</code> (utilisations illimitées), le
+                        secret_id ne périme jamais, ce qui simplifie grandement la
+                        gestion côté Vault-agent, qui peut tourner en continu sans
+                        interruption.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-shield-alt"></i> Étape 3 : Création des politiques
+                </h5>
+            </div>
+            <div class="card-body">
+                <p>Les politiques Vault, c'est comme les permissions sur un
+                    système de fichiers : elles définissent qui peut faire quoi.
+                    Notre Vault-Agent aura besoin de permissions spécifiques :
+                </p>
+
+                <pre class="bg-dark text-light p-3 rounded">
+<code class="language-bash"># Création de la politique pour vault-agent
+vault policy write vault-agent-policy - &lt;&lt;EOF
+# Permission de créer des certificats
+path "pki/issue/internal-server" {
+    capabilities = ["create", "update"]
+}
+
+# Permission de lire les infos de l'autorité de certification
+path "pki/ca" {
+    capabilities = ["read"]
+}
+
+path "pki/ca/pem" {
+    capabilities = ["read"]
+}
+EOF
+
+# Association de la politique au rôle AppRole
+vault write auth/approle/role/vault-agent policies="vault-agent-policy"
+</code></pre>
+
+                <div class="alert alert-success mt-3 mb-0">
+                    <strong>Principe de moindre privilège :</strong>
+                    <p class="mb-0">
+                        Notre agent ne peut que créer des certificats et lire
+                        les infos de la CA. Il ne peut pas lire d'autres secrets
+                        ou modifier la configuration. C'est ça, la sécurité
+                        !
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2 class="pb-3 pt-2">🏛️ Phase 3 : Création de notre PKI (on devient une
+            autorité de certification)</h2>
+        <div class="row mb-3">
+            <p class="col-12">Maintenant, on va transformer Vault en autorité de certification. En gros,
+                on
+                va créer notre propre "Let's Encrypt", mais en version maison, qui va gérer
+                tout seul les certificats pour notre réseau interne — sans avoir à sortir
+                ces horribles commandes <code>openssl</code> qui donnent des sueurs froides
+                !
+            </p>
+            <div class="col-12 col-lg-4 col-xl-6 col-xxl-3">
+                <img class="mx-auto mw-100 img-fluid d-block"
+                    src="../../assets/images/synology-vault/enfer-certificat.gif" alt="Asterix & Obelix A38"
+                    style="max-width: 400px;">
+            </div>
+            <div class="col-12 col-lg-8 col-xl-6 col-xxl-9 align-items-center d-flex align-items-center">
+                <p class="mx-auto mb-0 mt-3 mt-lg-0">
+                    Le sujet peut sembler un peu complexe au premier abord, mais ne
+                    t'inquiétes pas, je suis là pour te guider. Pour rendre tout ça plus
+                    clair et surtout plus sympa, on va utiliser une analogie simple et
+                    familière : celle d'une mairie. Tu vas voir, ça va nous aider à
+                    mieux comprendre cet univers un peu technique !
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-certificate"></i> Étape 1 : Certificat racine</h5>
+            </div>
+            <div class="card-body">
+                <p>On va commencer par activer le moteur de gestion des certificats :
+                    notre PKI (le bureau des papiers d'identité d'une mairie) ainsi que
+                    créer le certificat racine. Ce certificat racine, c'est un peu comme
+                    le maire principal de notre ville - il va pouvoir tamponner et
+                    valider tous les autres certificats de nos services. Une fois qu'on
+                    aura notre maire en chef installé à la mairie, on pourra créer
+                    autant de certificats "citoyens" qu'on veut pour nos différents
+                    services, tous avec le tampon officiel qui va bien. </p>
+
+                <pre class="bg-dark text-light p-3 rounded">
+<code class="language-bash"># Activation du moteur PKI
+vault secrets enable pki
+
+# Configuration de la durée de vie maximale (43800h = 5 an)
+vault secrets tune -max-lease-ttl=43800h pki
+
+# Génération du certificat racine
+vault write -field=certificate pki/root/generate/internal \
+    common_name="Internal CA" \
+    issuer_name="internal-issuer" \
+    ttl=43800h
+
+# Configuration des URLs de distribution
+vault write pki/config/urls \
+    issuing_certificates="http://vault.internal/v1/pki/ca" \
+    crl_distribution_points="http://vault.internal/v1/pki/crl"</code></pre>
+
+                <div class="alert alert-info mt-3">
+                    <strong>C'est quoi tout ça ?
+                    </strong>
+                    <p>Le détail serait bien trop long à expliquer ici, la
+                        certification c'est un immense concept de sécurité informatique
+                        qu'il faut prendre le temps de présenter pas à pas (et
+                        crois-moi, ça mérite son propre article !). Pour le moment,
+                        contentons-nous du jargon essentiel pour comprendre ce qui se
+                        passe :</p>
+                    <ul class="my-0">
+                        <li><strong>common_name:</strong> c'est le nom de ton maire.
+                            Oui, "Hidalgo" marcherait aussi, mais là c'est pas son
+                            mandat !</li>
+                        <li><strong>issuer_name :</strong> c'est l'étiquette qu'on colle
+                            sur son tampon officiel.</li>
+                        <li><strong>ttl :</strong> Time To Live, c'est le mandat de ton
+                            maire : pendant 5 ans comme les présidentielles, il pourra
+                            délivrer des certificats durant cette période avant de
+                            devoir prendre sa retraite !</li>
+                        <li><strong>issuing_certificates :</strong> où venir chercher
+                            les certificats</li>
+                        <li><strong>crl_distribution_points :</strong> où consulter la
+                            liste des certificats révoqués (les citoyens déchus… eh oui,
+                            on est un peu certificatophobe 😬)</li>
+                    </ul>
+                    <p class="mb-0">Ne t'inquiète pas si ça paraît compliqué,
+                        l'important c'est que Vault va s'occuper de tout ça pour nous !
+                    </p>
+                </div>
+                <div class="alert alert-primary mb-0">
+                    <strong>🧰 Caisse à Outils </strong>
+                    <p class="mb-0">
+                        Pour plus de détails sur le fonctionnement des certificats de sécurité consultez <a
+                            href="../tool-box/certificates.html" class="text-decoration-none">l'article ici</a>.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-cog"></i> Étape 2 : Rôle de certificat</h5>
+            </div>
+            <div class="card-body">
+                <p>Maintenant, on va créer un "rôle" qui définit quel type de
+                    certificats on peut générer - c'est comme créer un tampon spécialisé
+                    à la mairie. Au lieu d'avoir un seul tampon universel pour tout (ce
+                    qui serait un peu le bordel), on crée des tampons spécifiques : un
+                    pour les certificats de serveurs web, un autre pour les bases de
+                    données, etc. Notre rôle va dire "OK, avec ce tampon-là, tu peux
+                    créer des certificats pour tel ou tel usage, mais pas n'importe quoi
+                    !" :</p>
+
+                <pre class="bg-dark text-light p-3 rounded">
+<code class="language-bash"># Création du rôle pour les certificats serveur
+vault write pki/roles/internal-server \
+    allowed_domains="internal" \
+    allow_subdomains=true \
+    max_ttl="2160h" \
+    allow_any_name=false \
+    enforce_hostnames=true \
+    key_usage="DigitalSignature,NonRepudiation,KeyEncipherment,DataEncipherment" \
+    ext_key_usage="server_auth" \
+    basic_constraints="CA:FALSE"</code></pre>
+                <div class="alert alert-info my-3">
+                    <strong>Traduction en français :</strong>
+                    <ul class="my-0">
+                        <li><strong>allowed_domains :</strong> On signe uniquement pour
+                            le domaine .internal (notre territoire national, quel beau
+                            pays, hein ? 😄)</li>
+                        <li><strong>allow_subdomains :</strong> ... et ses sous-domaines
+                            (toutes nos régions : vault.internal, api.internal, etc.)
+                        </li>
+                        <li><strong>max_ttl :</strong> Durée de vie maximale des
+                            certificats (2160h = 90 jours)</li>
+                        <li><strong>allow_any_name :</strong> Pas question de signer
+                            n'importe quel nom au hasard</li>
+                        <li><strong>enforce_hostnames :</strong> Le nom sur le
+                            certificat doit correspondre à une vraie machine</li>
+                        <li><strong>key_usage :</strong> Fonctions de la clé, ce qu'elle
+                            <strong>peut</strong> faire (signature, chiffrement…)
+                        </li>
+                        <li><strong>ext_key_usage :</strong> Usage spécifique, ce pour
+                            quoi le certificat <strong>va être</strong> utilisé :
+                            (authentification serveur, client, etc.)</li>
+                        <li><strong>basic_constraints :</strong> Contraintes du
+                            certificat qui ici ne peut pas devenir lui-même une autorité
+                            pour signer d'autres certificats.</li>
+                    </ul>
+                </div>
+                <p>Rien de bien compliqué, ce sont juste nos règles locales : comme dans
+                    SimCity, mais avec plus de Matrix dedans.</p>
+                <p class="mb-0">Et tout ce qui ne respectera pas ces critères (libre à
+                    toi de les modifier hein évidemment) eh bien le maire va te
+                    rembarrer sec ! Comme à la préfecture quand il te manque une
+                    photocopie : pas de négociation, c'est non et au revoir. </p>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-vial"></i> Étape 3 : Test de génération</h5>
+            </div>
+            <div class="card-body">
+                <p>Allez, on fait un petit test pour voir si notre PKI
+                    fonctionne :</p>
+
+                <pre class="bg-dark text-light p-3 rounded">
+<code class="language-bash"># Test de génération d'un certificat
+vault write pki/issue/internal-server \
+    common_name="test.internal" \
+    ttl="720h"</code></pre>
+
+                <p>Si ça marche, tu vas voir plein d'informations s'afficher, notamment
+                    le certificat généré - un peu comme quand tu demandes une carte
+                    d'identité et qu'ils te sortent une liasse de papiers avec plein de
+                    tampons officiels ! Si tu vois défiler des lignes de texte cryptique
+                    avec des "BEGIN CERTIFICATE" et des caractères bizarres, c'est bon
+                    signe ! 🎉 Ça veut dire que notre maire numérique a bien fait son
+                    boulot et a pondu un beau certificat tout frais !</p>
+                <p>D'ailleurs, essaie de certifier <code>test.external</code> par
+                    exemple et tu vas voir que ça ne marche pas car on a dit à notre
+                    maire de certifier "internal" et RIEN d'autre ! D'ailleurs comment
+                    le pourrait-il vu qu'il n'a pas le tampon pour le faire ??? Si tu
+                    demandais au maire de Paris de te délivrer un passeport américain -
+                    il te regarderait bizarrement en mode "Désolé, moi je ne m'occupe
+                    que des affaires parisiennes !" Notre PKI est pareil : elle est très
+                    à cheval sur son territoire et refuse catégoriquement de signer quoi
+                    que ce soit qui ne soit pas dans son domaine de compétence.</p>
+                <div class="alert alert-info mt-3 mb-0">
+                    <strong>🤔 Et les erreurs de certificat "non reconnu" ?</strong>
+                    <p>Il faudra déployer le CA sur tes machines ! Enfin sa clé publique
+                        pour être précis. Parce que là, on a créé notre propre maire
+                        avec son propre tampon, mais les navigateurs et applications ne
+                        le connaissent pas encore. C'est comme si tu débarquais à
+                        l'aéroport avec un passeport délivré par la République de ton
+                        salon ou si tu brandissais une carte d'identité dessiné sous
+                        Paint - techniquement valide selon tes règles, mais personne ne
+                        va le reconnaître ! Pour que tes services fassent confiance à
+                        nos certificats "maison", il faudra installer notre certificat
+                        racine sur chaque machine. Attention, on installe juste le
+                        "registre d'authenticité des signatures" du maire, pas ses
+                        pouvoirs ! Le maire reste dans notre mairie, sa clef privé ne
+                        sortira JAMAIS du Vault. Tes machines sauront reconnaître "Ah
+                        oui, ce certificat vient bien de notre maire légitime", mais
+                        elles ne pourront pas créer des certificats pour autant - c'est
+                        juste pour dire "Tu peux lui faire confiance !""</p>
+                    <p>Pour le récupérer rien de plus simple :</p>
+                    <p>Va sur ton Vault :
+                        <code>https://vault.internal > pki > issuer > internal-issuer</code>
+                    </p>
+                    <p>En haut à droite tu as un onglet Downloads</p>
+                    <ul>
+                        <li>PEM format : le CA générique pour les systèmes Linux<br />Il
+                            te suffira de le déposer au chemin approprié en fonction de
+                            ta distribution et de lancer la commande d'intégration</li>
+                        <li class="mb-3">DER format : le CA reformaté pour système Windows<br />C'est
+                            encore plus facile, il te suffit de double-cliquer dessus et
+                            de suivre les interfaces pour l'installer dans les
+                            'certifications racine' de ton ordinateur</li>
+                        <img class="mx-auto img-fluid d-block"
+                            src="../../assets/images/synology-vault/windows-certificate.png"
+                            alt="ne pas aller sur l'interface web de synology">
+                    </ul>
+                    <p class="mb-0">Je précise que le CA n'est nécessaire que sur les
+                        machines qui ne seront pas gérées par le Vault-agent : ton PC,
+                        ton téléphone etc. Sinon c'est lui qui peut s'en charger et qui
+                        s'en chargera. C'est son taff après tout !</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2 class="pb-3 pt-2">🔧 Phase 4 : Configuration de Synology (la partie
+            fun)</h2>
+
+        <p>Maintenant, on va préparer Synology pour recevoir nos beaux
+            certificats automatiquement générés. C'est là que ça devient
+            vraiment intéressant ! Notre objectif va être de retirer l'alerte de
+            securité de l'interface web de Vault et Consul sur notre navigateur web donc
+            n'oublie pas de récuperer et installer le CA !</p>
+    </section>
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-folder-plus"></i> Étape 1 : Préparation des dossiers
+                </h5>
+            </div>
+            <div class="card-body">
+                <p>Synology stocke ses certificats dans un endroit bien précis.
+                    On va créer notre propre dossier de certificats :</p>
+
+                <pre class="bg-dark text-light p-3 mb-0 rounded">
+<code class="language-bash"># Connexion SSH à ton Synology
+# Création du dossier pour nos certificats
+sudo mkdir -p /usr/syno/etc/certificate/_archive/myCert
+
+# Changement des permissions
+sudo chown root:root /usr/syno/etc/certificate/_archive/myCert
+sudo chmod 755 /usr/syno/etc/certificate/_archive/myCert</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-edit"></i> Étape 2 : Le fichier INFO</h5>
+            </div>
+            <div class="card-body">
+                <p>Synology utilise un fichier JSON pour lister tous les
+                    certificats disponibles. On va ajouter le nôtre :</p>
+
+                <pre class="bg-dark text-light p-3 rounded">
+<code class="language-bash"># Backup du fichier original (on ne sait jamais)
+sudo cp /usr/syno/etc/certificate/_archive/INFO /usr/syno/etc/certificate/_archive/INFO.backup
+
+# Édition du fichier
+sudo nano /usr/syno/etc/certificate/_archive/INFO</code></pre>
+
+                <p class="mb-0">Ajoute cette section <strong>à la place</strong> la dernière
+                    accolade fermante du fichier :</p>
+
+                <pre class="bg-dark p-3 rounded">
+<code class="language-json">,"myCert": {
+    "desc": "Certificat auto-généré par Vault",
+    "services": [
+      {
+      }
+    ],
+    "user_deletable": false
+  }
+}</code></pre>
+
+                <div class="alert alert-warning mt-3">
+                    <strong>Attention : </strong>
+                    <p class="mb-0">
+                        Respecte bien la syntaxe JSON ! Une
+                        virgule en trop ou en moins et tout plante. Si tu as peur, fais un
+                        backup du fichier avant de le modifier.
+                    </p>
+                </div>
+                <div class="alert alert-danger mt-3">
+                    <strong>Danger : </strong>
+                    <p>
+                        Pendant la procédure, ne va
+                        <strong>JAMAIS</strong> sur l'interface web des certificats de
+                        Synology
+                    </p>
+                    <img class="mx-auto img-fluid d-block" src="../../assets/images/synology-vault/synology-no-cert.png"
+                        alt="ne pas aller sur l'interface web de synology">
+                    <p class="mt-3">Pourquoi ? Eh bien tout simplement car ils ont
+                        eu la brillante idée d'intégrer un checker auto-générant si tu
+                        cliques sur l'onglet. Ce n'est pas dramatique mais il faudra
+                        nettoyer le contenu du dossier que tu viens de créer des
+                        certificats auto-générés par Synology.</p>
+                    <p>
+                        De la même manière, n'utilise pas le certificat que l'on génère pour la configuration par défaut
+                        de ton NAS, du moins tant que tu n'as pas généré des certificats valides. En effet, l'accès à
+                        l'interface
+                        web va provoquer une vérification du certificat et donc une génération auto-signée par le CA de
+                        Synology
+                        s'il n'arrive pas à l'utiliser (mal formé, expiré, etc.).
+                    </p>
+                    <p class="mb-0">
+                        En gros, n'utilise ce certificat que pour tes services à toi, pas pour ceux de Synology et il ne
+                        viendra pas t'embeter même si tu passes par son reverse proxy.
+                    </p>
+                </div>
+                <div class="alert alert-info mt-3 mb-0">
+                    <strong>Note : </strong>
+                    <p class="mb-0">
+                        Si tu veux automatiser les services qui
+                        devront utiliser nos certificats, tu peux les indiquer sous forme de
+                        liste dans le tableau "services". Mais attention à ne pas dupliquer
+                        des services déjà associés à d'autres certificats, sinon ton
+                        Synology risque de ne pas apprécier ! Dans cet article, on va rester
+                        simple et les appliquer via l'interface Web, une fois les
+                        certificats déployés.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2 class="pb-3 pt-2">🤖 Phase 5 : Lancement Vault-Agent</h2>
+        <p>Bon, on y est. Le moment où tout ce qu'on a préparé en amont va (normalement) fonctionner. On va
+            relancer notre stack <code>docker-compose</code> pour cette fois activer Vault-agent <em>(que l'on avait
+                retiré jusqu'ici)</em> et déclencher le déploiement automatique de nos certificats.</p>
+
+    </section>
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-edit"></i> Étape 1 : Déploiement de la stack Vault-Agent</h5>
+            </div>
+            <div class="card-body">
+                <p>
+                    Une fois que tu as les identifiants corrects et que Vault est configuré, tu peux redéployer la stack
+                    complète
+                    avec le Vault-Agent pour activer la mise à jour automatique des certificats :
+                </p>
+                <pre class="bg-dark text-light p-3 rounded"><code class="language-bash"># On déploie maintenant la stack complète avec Vault-Agent
+docker stack deploy -c /volume1/docker/secret/swarm_vault_agent.yml  secret</code></pre>
+
+                <p>
+                    Ensuite, assure-toi que Vault est bien <strong>unsealed</strong> (c'est-à-dire déverrouillé). Sinon,
+                    rien ne bougera côté génération de certificats. Si Vault est encore scellé, connecte-toi à
+                    l'interface web (<code>https://vault.internal</code>) ou lance plusieurs fois la commande :
+                </p>
+                <pre
+                    class="bg-dark text-light p-3 rounded"><code class="language-bash">vault operator unseal</code></pre>
+                <p>
+                    Cela déverrouille Vault avec les clés d'unseal, nécessaires pour que Vault puisse accéder à ses
+                    secrets et délivrer tes certificats.
+                </p>
+
+                <p>À partir de là, Vault-Agent va :</p>
+                <ul>
+                    <li>S'authentifier auprès de Vault grâce au mécanisme AppRole (plus sécurisé qu'un simple token)
+                    </li>
+                    <li>Se connecter au serveur Vault pour demander un certificat TLS via l'API PKI</li>
+                    <li>Générer le certificat en fonction du template que tu as défini (avec les SAN, TTL, etc.)</li>
+                    <li>Déployer les certificats au bon endroit sur ton NAS Synology (pour que DSM puisse les utiliser)
+                    </li>
+                    <li>Redémarrer automatiquement <code>nginx</code> (le serveur web du NAS) pour appliquer les
+                        nouveaux certificats en direct</li>
+                </ul>
+
+                <p class="mb-0"><em>En clair, tu passes d'une config manuelle et casse-tête à une machine bien huilée
+                        qui bosse toute seule. Tu peux aller te faire un café pendant que ça tourne.</em></p>
+            </div>
+        </div>
+    </section>
+
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-edit"></i> Étape 2 : Vérification des certificats</h5>
+            </div>
+            <div class="card-body">
+                <p>Maintenant que Vault-Agent a bossé, il est temps de vérifier que tout est bien généré et à sa place :
+                </p>
+                <pre
+                    class="bg-dark text-light p-3 rounded"><code class="language-bash">ls -l /usr/syno/etc/certificate/_archive/myCert/</code></pre>
+
+                <p>Tu devrais voir apparaître :</p>
+                <div class="row mb-lg-3">
+                    <img class="d-block col-12 col-lg-6 mb-3 mb-lg-0"
+                        src="../../assets/images/synology-vault/vault-certificates-list.png"
+                        alt="certificat installé sur le serveur">
+                    <div class="col-12 col-lg-6">
+                        <ul>
+                            <li><code>privkey.pem</code> &rarr; ta clé privée (ultra sensible, permissions serrées à
+                                0600)</li>
+                            <li><code>cert.pem</code> &rarr; le certificat public</li>
+                            <li><code>fullchain.pem</code> &rarr; certificat + chaîne complète (certificat + CA)</li>
+                            <li><code>all-certs</code> &rarr; fichier utilisé par Vault pour gérer le suivi des
+                                certificats</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <p><strong>Attention :</strong> Le redémarrage de NGINX est nécessaire pour que DSM prenne en compte les
+                    nouveaux certificats, mais cela redémarre aussi Docker. Cela veut dire que tous tes services dans ta
+                    stack Consul-Vault (et les autres) vont redémarrer aussi. Patience, attends que tout soit bien
+                    reparti avant d'aller plus loin et n'oublie pas qu'il faudra à nouveau unseal ton Vault.</p>
+
+                <div class="alert alert-success">
+                    <strong>Si tout est là, félicitations !</strong>
+                    <p class="mb-0">Ton Vault-Agent a fait son taf, les certificats sont signés, frais et stockés pile
+                        là où Synology les attend. Plus de risques d'erreur humaine ou de certificat périmé qui fait
+                        planter ton NAS.</p>
+                </div>
+                <div class="alert alert-info mb-0">
+                    <strong>Rappel important</strong>
+                    <p>Le fichier <code>all-certs</code> joue le rôle de déclencheur principal pour le renouvellement
+                        automatique. Si tu le supprimes, Vault-Agent va détecter son absence et générer un nouveau
+                        certificat lors de la prochaine vérification programmée. C'est super pratique si tu veux ajouter
+                        un SAN, ajuster la durée de vie, ou corriger une erreur dans le template de départ.</p>
+
+                    <p class="mb-0">Mais attention : Vault-Agent ne compare pas le contenu sur l'hôte du fichier, il se
+                        base uniquement sur ce qu'il "sait" — c'est-à-dire la configuration initiale définie dans le
+                        template (durée, SAN, CN, etc) et le Vault. Si tu modifies un paramètre mais que tu ne
+                        redémarres
+                        pas l'agent, il ne fera pas forcément de mise à jour immédiate.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-edit"></i> Étape 3 : Activation dans DSM</h5>
+            </div>
+            <div class="card-body">
+                <p>Direction DSM maintenant, dans <strong>Panneau de configuration &gt; Sécurité &gt;
+                        Certificat</strong>.</p>
+                <p>Tu verras apparaître les certificats générés par Vault. Il ne reste plus qu'à les assigner aux
+                    services que tu souhaites sécuriser (Vault, Consul, ton API etc, etc.) via l'onglet
+                    "<strong>Paramètres</strong>".</p>
+
+                <img class="mx-auto img-fluid d-block my-3"
+                    src="../../assets/images/synology-vault/vault-agent-cert-installed.png"
+                    alt="certificat installé dans DSM">
+
+                <p>Ce qui est génial, c'est que le lien entre les services (ceux que tu as déclarés dans le reverse
+                    proxy) et les certificats est fait à un niveau supérieur, via le système de key-value JSON qu'on a
+                    modifié manuellement. En clair : ce n'est pas le contenu du certificat qui détermine quel service
+                    l'utilise, mais bien une référence déclarative dans un fichier de config système.</p>
+
+                <p>Résultat : tu peux régénérer tes certificats, les renouveler, les faire bénir par trois PKI
+                    différentes… tant que tu ne touches pas à la déclaration JSON dans le fameux fichier
+                    <code>INFO</code>, les assignations resteront intactes !
+                </p>
+
+                <p><strong>Attention quand même :</strong> si tu modifies manuellement le fichier <code>INFO</code> (ou
+                    que tu fais une erreur de syntaxe, là
+                    oui, il faudra repasser par la case “Assignation manuelle” dans DSM.</p>
+
+                <p class="mb-0"><em>Bref, tant que tu laisses le <code>INFO</code> tranquille, DSM reste zen.</em></p>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mt-2"><i class="fas fa-edit"></i> Étape 4 : Et maintenant ?</h5>
+            </div>
+            <div class="card-body">
+                <p>Avec ta PKI maison qui tourne comme une horloge suisse, tu vas pouvoir :</p>
+                <ul>
+                    <li><strong>Étendre facilement ta gestion des certificats :</strong> Ajoute autant de templates
+                        Vault que nécessaire, chacun adapté à un service ou un environnement spécifique.</li>
+                    <li><strong>Déployer partout :</strong> Sur des machines physiques, des VM, des containers, des API
+                        internes, des reverse proxies, bref, tous les points qui ont besoin de TLS.</li>
+                    <li><strong>Automatiser la maintenance :</strong> Intègre cette gestion dans un repo Git, un
+                        pipeline CI/CD, et finis les manips manuelles et les oublis. Moi je vous en propose un
+                        <em>...roulement de tambour...</em> : ANSIBLE !
+                    </li>
+                </ul>
+
+                <p><strong>Pourquoi c'est cool ?</strong> Parce que tu gagnes en sécurité (plus de certificats périmés),
+                    en fiabilité (moins d'erreurs humaines), et en temps (moins de support à gérer). Et en prime, tu
+                    prépares ton infrastructure pour évoluer vers du Kubernetes, des clusters multi-serveurs, et des
+                    architectures modernes.</p>
+
+                <div class="alert alert-secondary mb-0">
+                    <strong>Envie d'aller plus loin ?</strong>
+                    <p class="mb-0">
+                        Dans le prochain article, on passera à la vitesse supérieure : on intégrera un
+                        <code>ACME challenge</code>
+                        pour obtenir des certificats publics juste avec Vault (pas de cerbot ou autres), signés par une vraie autorité de certification (genre
+                        Let's Encrypt). Fini les certificats auto-signés, place à la
+                        gloire publique pour exposer sur Internet nos applications !
+                        <strong>Stay tuned !</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+
+        <h2 class="pb-3 pt-2"><i class="fas fa-bug"></i> Debug & Commandes utiles</h5>
+
+            <p>Si jamais ça coince ou que tes certificats ne sont pas pris en compte, voici quelques commandes clés
+                pour redémarrer les services essentiels sur ton Synology qui risquent de ce bloquer:</p>
+            <pre class="bg-dark text-light p-3 rounded"><code>/usr/syno/bin/synosystemctl restart nginx
+synopkg start FileService
+synopkg start ContainerManager
+</code></pre>
+            <p>Ces commandes permettent de relancer :</p>
+            <ul>
+                <li><strong>NGINX</strong> : le serveur web qui gère notamment l'interface DSM et la prise en charge
+                    des certificats TLS.</li>
+                <li><strong>FileService</strong> : le service de gestion des fichiers, souvent impacté lors de
+                    changements dans les accès sécurisés.</li>
+                <li><strong>ContainerManager</strong> : le gestionnaire des conteneurs Docker, nécessaire pour que
+                    Vault-Agent et autres services fonctionnent correctement.</li>
+            </ul>
+
+            <p>Redémarrer ces services évite d'avoir à redémarrer complètement ton NAS, ce qui est beaucoup
+                plus pratique et rapide.</p>
+
+            <p>Quand ça coince, c'est souvent NGINX qui se retrouve avec des certificats dans un état ambigu : un bout à
+                moitié remplacé, un autre qui traîne… Résultat, il ne sait plus quoi charger et plante en silence. Tu
+                peux confirmer ça avec <code>journalctl</code>, mais franchement, le plus rapide, c'est de faire un
+                reset en bonne et due forme.</p>
+
+            <p>Voici la procédure simple pour revenir à un état propre :</p>
+            <ol>
+                <li>Commence par <strong>vider manuellement ton dossier de certificats</strong> (ou le renommer si tu
+                    veux garder une copie).</li>
+                <li>Va dans l'interface DSM, section <strong>Panneau de configuration &gt; Sécurité &gt;
+                        Certificat</strong>.</li>
+                <li>DSM va détecter l'absence de certificats et <strong>générer automatiquement un nouveau certificat
+                        auto-signé</strong> via son propre CA.</li>
+                <li><strong>Redémarre NGINX</strong> pour qu'il prenne en compte les nouveaux certificats :</li>
+            </ol>
+
+            <pre class="bg-dark text-light p-3 rounded"><code>/usr/syno/bin/synosystemctl restart nginx</code></pre>
+
+            <p>Et enfin — oui, c'est contre-intuitif mais important — <strong>vide à nouveau le dossier de
+                    certificats</strong> car il va te faire plein de fichiers dont tu n'as pas besoin.</p>
+
+            <p>Et voilà ! Tu es revenu à zéro proprement, avec un DSM content, un NGINX relancé, et un Vault prêt à
+                redéposer ses petits PEM tout frais.</p>
+
+            <p>Cette astuce combinée aux commandes de redémarrage te permet de restaurer rapidement un état
+                fonctionnel, notamment si un certificat est corrompu ou mal configuré, sans provoquer d'interruption
+                longue sur ton système.</p>
+
+            <div class="alert alert-info mb-0">
+                <strong>Petit conseil</strong>
+                <p class="mb-0">
+                    Pas de panique : ce ne sont que des certificats. Tant que tu ne remplaces pas les
+                    certificats utilisés par Synology pour ses services internes, rien de vraiment casse-cou — tu
+                    peux y aller franco, tu ne vas pas le casser ton NAS !
+                </p>
+            </div>
+    </section>
+</div>

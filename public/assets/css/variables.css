@@ -1,0 +1,75 @@
+:root {
+  /* Couleurs principales - Compatible avec Bootstrap */
+  --bs-primary: #007AFF;
+  --bs-primary-rgb: 0, 122, 255;
+  --bs-secondary: #6C757D;
+  --bs-success: #34C759;
+  --bs-info: #17A2B8;
+  --bs-warning: #FF9500;
+  --bs-danger: #DC3545;
+  --bs-light: #F8F9FA;
+  --bs-dark: #6d7b88;
+  
+  /* Couleurs personnalisées Apple-inspired */
+  --primary-color: #007AFF;
+  --primary-dark: #0051D5;
+  --secondary-color: #34C759;
+  --accent-color: #FF9500;
+  
+  /* Couleurs neutres */
+  --text-primary: #1D1D1F;
+  --text-secondary: #6E6E73;
+  --text-tertiary: #8E8E93;
+  --background-primary: #FFFFFF;
+  --background-secondary: #F5F5F7;
+  --background-tertiary: #FBFBFD;
+  --border-color: #D2D2D7;
+  --hover-background: #F0F0F5;
+  
+  /* Typographie - San Francisco inspired */
+  --font-system: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --font-display: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-text: 'SF Pro Text', -apple-system, BlinkMacSystemFont, sans-serif;
+  
+  /* Rayons de bordure personnalisés */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  
+  /* Ombres personnalisées */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.08), 0 4px 6px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.10), 0 8px 10px rgba(0, 0, 0, 0.06);
+  
+  /* Transitions */
+  --transition-fast: 0.15s ease-out;
+  --transition-normal: 0.25s ease-out;
+  --transition-slow: 0.35s ease-out;
+}
+
+.my-0-5 {
+    margin-top: .2rem !important;
+    margin-bottom: .2rem !important;
+}
+
+section[id]:has(h2) {
+    scroll-margin-top: 85px; 
+}
+
+/* Sections contenant des h5 */
+section[id]:has(h5) {
+    scroll-margin-top: 95px; 
+}
+
+.nav-link.highlighted {
+  background-color: rgba(0, 123, 255, 0.08); /* fond doux */
+  padding-left: calc(0.5rem + 3px); /* compense la bordure */
+  transition: background-color 0.3s ease;
+}
+
+.accordion-button:focus {
+    box-shadow: none !important;
+    outline: none !important;
+}

@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  blog-server:
+    build: .
+    container_name: codermug
+    ports:
+      - "3000:3000"
+      - "3443:3443"
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=dev
+    command: npm run dev

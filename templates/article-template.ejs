@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+    <!-- SEO Meta Tags -->
+    <title><%= article.title.replace(/<br\s*\/?>/g, ' ') %> - Codermug</title>
+    <meta name="description" content="<%= article.description %>">
+    <meta name="keywords" content="<%= article.tags.join(', ') %>">
+    <meta name="author" content="Benjamin Romeo">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://codermug.low-layer.com/articles/<%= article.articleName %>">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="<%= article.title.replace(/<br\s*\/?>/g, ' ') %>">
+    <meta property="og:description" content="<%= article.description %>">
+    <meta property="og:url" content="https://codermug.low-layer.com/articles/<%= article.articleName %>">
+    <meta property="og:site_name" content="Codermug">
+    <meta property="article:published_time" content="<%= article.creationDate %>T10:00:00Z">
+    <% if (article.lastModificationDate) { %>
+    <meta property="article:modified_time" content="<%= article.lastModificationDate %>T10:00:00Z">
+    <% } %>
+    <meta property="article:author" content="Benjamin Romeo">
+    <meta property="article:section" content="<%= article.category %>">
+    <% article.tags.forEach(tag => { %>
+    <meta property="article:tag" content="<%= tag %>">
+    <% }); %>
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<%= article.title.replace(/<br\s*\/?>/g, ' ') %>">
+    <meta name="twitter:description" content="<%= article.description %>">
+
+    <!-- Schema.org JSON-LD -->
+    <script type="application/ld+json">
+    {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "<%= article.title.replace(/<br\s*\/?>/g, ' ') %>",
+    "description": "<%= article.description %>",
+    "author": {
+        "@type": "Person",
+        "name": "Benjamin Romeo"
+    },
+    "datePublished": "<%= article.creationDate %>",
+    "dateModified": "<%= article.lastModificationDate || article.creationDate %>",
+    "publisher": {
+        "@type": "Organization",
+        "name": "Codermug"
+    },
+    "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://codermug.low-layer.com/articles/<%= article.articleName %>"
+    },
+    "articleSection": "<%= article.category %>",
+    "keywords": <%= JSON.stringify(article.tags) %>
+    }
+    </script>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="icon" type="image/png" href="/favicon.png">
+
+    <!-- Prism CSS -->
+    <link href="../assets/css/prism.css" rel="stylesheet" />
+
+    <!-- Custom CSS Files -->
+    <link rel="stylesheet" href="../assets/css/variables.css">
+    <link rel="stylesheet" href="../assets/css/base.css">
+    <link rel="stylesheet" href="../assets/css/components.css">
+    <link rel="stylesheet" href="../assets/css/header.css">
+    <link rel="stylesheet" href="../assets/css/footer.css">
+    <link rel="stylesheet" href="../assets/css/pages.css">
+    <link rel="stylesheet" href="../assets/css/articles.css">
+</head>
+
+<body>
+    <header><%- include('includes/header') %></header>
+
+    <main role="main" class="py-3 justify-content-center">
+        <article class="article py-0 px-md-2">
+            <header class="article-header text-center border-bottom">
+                <h1 class="article-title display-4 fw-bold mb-2"><%= article.title %></h1>
+                <p class="article-description lead text-muted mb-4 mx-auto"><%= article.description %></p>
+                <small class="text-muted mb-2">
+                    <div>
+                        Publié le <span>
+                                <%= article.creationDate %>
+                            </span> • Dernière modification le <span>
+                                <%= article.lastModificationDate %>
+                            </span>
+                    </div>
+                    <div class="mb-3">
+                        <%= article.readTime %> de lecture
+                    </div> 
+                </small>
+            </header>
+
+            <div class="article-content">   
+                <div class="container mw-100 mw-lg-100 ">
+                    <div class="row">
+                        <div class="d-none d-xl-block col-xl-3">
+                            <nav id="navbar" class="sticky-top flex-column align-items-stretch border-end pt-3 pe-4" style="top: 70px;">
+                                <nav class="nav nav-pills flex-column">
+                                    <% function renderMenu(items, level = 0) { %>
+                                        <% items.forEach(item => { %>
+                                            <a class="nav-link py-0 px-2 my-0-5 fs-6 ms-<%= level * 3 %>" href="#<%= item.id %>"><%= item.title %></a>
+                                            <% if (item.children && item.children.length) { %>
+                                                <nav class="nav nav-pills flex-column fs-6">
+                                                    <% renderMenu(item.children, level + 1); %>
+                                                </nav>
+                                            <% } %>
+                                        <% }) %>
+                                    <% } %>
+                                    <% renderMenu(menuItems); %>
+                                </nav>
+                            </nav>
+                        </div>
+                        <div class="col-12 col-xl-9">
+                            <div>
+                                <%- article.content %>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            
+            <footer class="border-top mt-3">
+                <div class="d-flex flex-column align-items-center justify-content-center mt-4">
+                    <h5>Tags</h5>
+                    <div class="d-flex flex-wrap justify-content-center">
+                        <% if (article.tags && article.tags.length) { %>
+                        <% article.tags.forEach(tag => { %>
+                            <span class="badge bg-primary m-1"><%= tag %></span>
+                        <% }) %>
+                        <% } else { %>
+                        <p>Aucun tag</p>
+                        <% } %>
+                    </div>
+                </div>
+                <div class="article-share text-center">
+                    <h3 class="h5 fw-semibold m-3">Partager cet article</h3>
+                    <div class="d-flex justify-content-center gap-2 flex-wrap">
+                        <button class="btn btn-outline-primary btn-sm share-btn"
+                            onclick="BlogUtils.share('<%= article.title %>', window.location.href)">
+                            <svg width="16" height="16" viewBox="0 0 24 24"
+                                fill="currentColor" class="me-1">
+                                <path
+                                    d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.50-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z" />
+                            </svg>
+                            Partager
+                        </button>
+                    </div>
+                </div>
+
+                <div class="article-navigation text-center">
+                    <a href="../articles" class="btn btn-link text-decoration-none">
+                        <i class="bi bi-arrow-left me-1"></i>
+                        Retour aux articles
+                    </a>
+                </div>
+            </footer>
+        </article>
+    </main>
+
+    <footer><%- include('includes/footer') %></footer>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Prism JS -->
+    <script src="../assets/js/prism.js"></script>
+
+    <!-- Custom JS -->
+    <script src="../assets/js/common.js"></script>
+    <script src="../assets/js/menu.js"></script>
+</body>
+
+</html>

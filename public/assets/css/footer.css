@@ -1,0 +1,50 @@
+/* ===== FOOTER STYLES ===== */
+.site-footer {
+  background-color: var(--background-secondary);
+  border-top: 1px solid var(--border-color);
+}
+
+.site-footer h5 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.site-footer .list-unstyled a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: color var(--transition-fast);
+}
+
+.site-footer .list-unstyled a:hover {
+  color: var(--primary-color);
+}
+
+.site-footer .text-muted {
+  color: var(--text-secondary) !important;
+}
+
+.site-footer .text-muted a {
+  color: var(--text-tertiary);
+  transition: color var(--transition-fast);
+}
+
+.site-footer .text-muted a:hover {
+  color: var(--primary-color);
+}
+
+.site-footer hr {
+  border-color: var(--border-color);
+  opacity: 1;
+}
+
+/* RSS Link styling */
+.site-footer svg {
+  opacity: 0.7;
+  transition: opacity var(--transition-fast);
+}
+
+.site-footer a:hover svg {
+  opacity: 1;
+}
