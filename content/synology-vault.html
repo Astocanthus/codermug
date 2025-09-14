@@ -18,22 +18,12 @@
     </section>
 
     <section>
-        <h2 class="pb-3 pt-2">🤦‍♂️ Le problème qu'on connaît tous</h2>
+        <h2 class="pb-3 pt-2">🤦‍♂️ Générer des certificats, quelle galère !</h2>
 
-        <p>Bon, soyons honnêtes. Qui n'a jamais eu ce moment de pure frustration
-            :</p>
-
-        <div class="card bg-light mb-4">
-            <div class="card-body">
-                <p class="font-italic mb-0">"Putain, mais pourquoi mon certificat
-                    SSL a expiré un dimanche à 23h45 ? Et bien sûr, c'est pile
-                    au moment où le patron veut montrer la nouvelle
-                    fonctionnalité à ses potes..."</p>
-            </div>
-        </div>
-
-        <p>Ou alors cette magnifique erreur qui fait toujours plaisir :</p>
-
+        <p>C'est toujours chiant de générer des certificats. Tu te dis “je le ferai plus tard” pour aller vite… et puis,
+            au moment où tu veux brancher un service, il en a absolument besoin. Là, c'est la galère : ça ne fait pas
+            très pro, et tu perds un temps fou à te remettre dedans.</p>
+        <p>Ou alors cette magnifique erreur qui fait toujours plaisir en gros dans ton navigateur :</p>
         <div class="alert alert-danger mb-4">
             <strong>NET::ERR_CERT_AUTHORITY_INVALID</strong>
             <p class="mb-0">
@@ -42,13 +32,13 @@
             </p>
         </div>
 
-        <p>Yeah, génial ! Sans compter que parfois c'est un service qui te le sort et
-            lui il n'arrive carrément pas à se connecter avec ! 😅</p>
+        <p>Yeah, génial ! Sans compter que parfois, c'est un service tout frais qui te sort cette erreur et lui, il n'arrive
+            carrément pas à s'en servir ! 😅</p>
 
-        <p>Et ne parlons pas de ces moments où tu configures ton homelab avec
-            des certificats auto-signés "juste pour tester", et que 6 mois plus
-            tard tu t'aperçois que la moitié de tes services sont encore en HTTP
-            ou avec des certificats foireux.</p>
+        <p>Et ne parlons pas de ces moments où tu configures ton homelab avec des certificats auto-signés “juste pour
+            tester”, et que finalement une bonne moitié de tes services traînent encore en HTTP ou avec des certificats
+            foireux.</p>
+        <p>BREEEEEFFFFFF....</p>
 
         <blockquote class="blockquote p-4 my-4">
             <p>"Il n'y a que deux types de développeurs : ceux qui ont déjà eu
@@ -297,17 +287,14 @@ docker swarm init --advertise-addr eth0
             </div>
             <div class="card-body">
                 <p>
-                    Dans les sections suivantes, nous allons décortiquer chaque fichier de configuration que j'ai
-                    présenté dans l'arborescence du projet. Des <code>orchestrations yaml</code> jusqu'au
-                    <code>template Vault</code> en
-                    passant par les <code>scripts de démarrage</code>, chaque ligne sera expliquée avec le soin d'un
-                    développeur qui
-                    documente son code... parce que oui, ça arrive parfois !
+                    Bon, maintenant qu'on a fait le tour de l'architecture, il est temps de rentrer dans le vif du sujet
+                    ! On va éplucher ensemble chaque fichier de cette arborescence que je t'ai montrée plus haut.
                 </p>
                 <p>
-                    Alors, sort ton café ☕, ouvrez ton éditeur préféré (et non, Notepad ne compte pas), et
-                    on va attaquer ces YAML, HCL et Bash scripts qui vont transformer ton NAS en
-                    véritable coffre-fort numérique.
+                    Alors prépare-toi un bon café ☕ (ou un thé si tu es de ce bord-là), lance ton éditeur de code favori
+                    - et s'il te plaît, pas Notepad, on a notre dignité ! - et c'est parti pour une plongée dans ces
+                    fichiers YAML, HCL et Bash qui vont métamorphoser ton petit NAS en <span class="highlight">véritable
+                        bunker numérique</span>.
                 </p>
                 <div class="accordion" id="accordionPanelsStayOpenExample">
                     <div class="accordion" id="accordionPanelsStayOpenExample">
@@ -506,8 +493,9 @@ networks:
                                         <li><code>user: root</code> pour avoir tous les droits nécessaires.</li>
                                         <li><code>cap_add: IPC_LOCK</code> pour verrouiller la mémoire et protéger les
                                             secrets.</li>
-                                        <li><code>cap_add: SYS_CHROOT</code> pour utiliser chroot et accéder au système hôte,
-                                        notamment pour redémarrer des services.</li>
+                                        <li><code>cap_add: SYS_CHROOT</code> pour utiliser chroot et accéder au système
+                                            hôte,
+                                            notamment pour redémarrer des services.</li>
                                         <li><code>volumes</code> importants :
                                             <ul>
                                                 <li>Les configs agent et templates de certificats.</li>
@@ -1520,7 +1508,8 @@ docker stack services secret
                             <p>
                                 Je n'ai malheureusement pas encore trouvé comment chiffrer le flux réseau entre les
                                 composants dans le docker de Synology.
-                                Ajouter cette option dans la création du réseau semble bloquer le déploiement des conteneurs — probablement
+                                Ajouter cette option dans la création du réseau semble bloquer le déploiement des
+                                conteneurs — probablement
                                 à cause d'un droit manquant au niveau du noyau, ou un autre mécanisme de sécurité
                                 interne.
                             </p>
@@ -1552,7 +1541,8 @@ docker stack services secret
 
                         <p class="mt-3">
                             Si tout va bien, tu devrais voir 2 services dans cette première stack : consul et vault.
-                            Souvient toi, le Vault-agent, lui n'est pas lancé pour le moment car il a besoin de Vault configuré pour s'authentifier.
+                            Souvient toi, le Vault-agent, lui n'est pas lancé pour le moment car il a besoin de Vault
+                            configuré pour s'authentifier.
                         </p>
                         <p class="mb-0">
                             Cette gestion en deux stacks séparées n'est pas très pratique, mais Swarm ne permet pas
@@ -1661,6 +1651,12 @@ docker exec -it $(docker ps -qf "name=secret_vault.1") vault operator init</code
                         déposer quoi que ce soit dedans ! Même les applications qui
                         essaient d'accéder aux secrets vont se prendre un beau "403
                         Forbidden".</p>
+                    <p>
+                        Je sais qu'il y a des petits malins qui s'amusent à coder des scripts pour unseal
+                        automatiquement le Vault. <strong>NE LE FAIS PAS</strong> : ce sont des idiots. C'est comme
+                        construire un coffre-fort ultra-sécurisé… puis percer un trou dedans parce que t'as la flemme de
+                        tourner la clé. Sérieusement, qui ferait ça dans une banque ? Bah là, c'est pareil !
+                    </p>
                     <strong>En gros :</strong>
                     <p class="mb-0">Redémarrage = Vault
                         scellé = Toi qui dois te lever pour le déverrouiller. C'est le
@@ -1836,10 +1832,14 @@ docker exec -it $(docker ps -qf "name=secret_vault.1") vault operator init</code
                     CLI</a>
                 <div class="alert alert-info mt-3">
                     <strong>Explication :</strong>
-                    <p class="mb-0">
+                    <p>
                         L'interface Web ne
                         permet pas de générer le type d'identifiant dont on va avoir besoin, c'est pour ça que l'on
                         installe le CLI.
+                    </p>
+                    <p class="mb-0">
+                        Sache que tu peux très bien générer tout ce qu'il faudra par la suite également avec Terraform
+                        plutôt qu'en CLI, le provider intégré sait déjà configurer Vault.
                     </p>
                 </div>
                 <p class="mt-3">Une fois que c'est fait, tu peux te connecter à Vault
@@ -1878,7 +1878,7 @@ vault login
                     automatiquement. C'est comme un couple login/password, mais
                     en plus sécurisé.</p>
 
-                <pre class="bg-dark text-light p-3 rounded">
+                <pre class="bg-dark text-light p-3 mb-4 rounded">
 <code class="language-bash"># Activation de l'authentification AppRole
 vault auth enable approle
 
@@ -1890,6 +1890,14 @@ vault write auth/approle/role/vault-agent \
     secret_id_num_uses=0 \
     bind_secret_id=true \
     policies=vault-agent-policy</code></pre>
+                <div class="alert alert-primary p-3">
+                    <h5>🐙 Version Terraform</h5>
+                    <p class="mb-0">
+                        Pour automatiser cette configuration, consultez ce fichier Terraform sur
+                        <a href="https://github.com/Astocanthus/low-layer-platform/blob/main/terraform/vault/r_vault_identity.tf"
+                            target="_blank" class="text-decoration-none">GitHub ici</a>.
+                    </p>
+                </div>
 
                 <p class="mt-3">Ensuite, on récupère les identifiants (c'est ça
                     qu'on va mettre dans nos secrets Docker pour le Vault-Agent avec de vrai valeurs
@@ -1982,6 +1990,14 @@ vault write auth/approle/role/vault-agent policies="vault-agent-policy"
                         les infos de la CA. Il ne peut pas lire d'autres secrets
                         ou modifier la configuration. C'est ça, la sécurité
                         !
+                    </p>
+                </div>
+                <div class="alert alert-primary mt-3 mb-0">
+                    <h5>🐙 Version Terraform</h5>
+                    <p class="mb-0">
+                        Pour automatiser cette configuration, consultez ce fichier Terraform sur
+                        <a href="https://github.com/Astocanthus/low-layer-platform/blob/main/terraform/vault/r_vault_identity.tf"
+                            target="_blank" class="text-decoration-none">GitHub ici</a>.
                     </p>
                 </div>
             </div>
@@ -2078,11 +2094,19 @@ vault write pki/config/urls \
                         l'important c'est que Vault va s'occuper de tout ça pour nous !
                     </p>
                 </div>
-                <div class="alert alert-primary mb-0">
+                <div class="alert alert-primary">
                     <strong>🧰 Caisse à Outils </strong>
                     <p class="mb-0">
                         Pour plus de détails sur le fonctionnement des certificats de sécurité consultez <a
                             href="../tool-box/certificates.html" class="text-decoration-none">l'article ici</a>.
+                    </p>
+                </div>
+                <div class="alert alert-primary mb-0">
+                    <h5>🐙 Version Terraform</h5>
+                    <p class="mb-0">
+                        Pour automatiser cette configuration, consultez ce fichier Terraform sur
+                        <a href="https://github.com/Astocanthus/low-layer-platform/blob/main/terraform/vault/r_pki.tf"
+                            target="_blank" class="text-decoration-none">GitHub ici</a>.
                     </p>
                 </div>
             </div>
@@ -2147,6 +2171,14 @@ vault write pki/roles/internal-server \
                     toi de les modifier hein évidemment) eh bien le maire va te
                     rembarrer sec ! Comme à la préfecture quand il te manque une
                     photocopie : pas de négociation, c'est non et au revoir. </p>
+                <div class="alert alert-primary p-3 mb-0 mt-3">
+                    <h5>🐙 Version Terraform</h5>
+                    <p class="mb-0">
+                        Pour automatiser cette configuration, consultez ce fichier Terraform sur
+                        <a href="https://github.com/Astocanthus/low-layer-platform/blob/main/terraform/vault/r_pki.tf"
+                            target="_blank" class="text-decoration-none">GitHub ici</a>.
+                    </p>
+                </div>
             </div>
         </div>
     </section>
@@ -2511,7 +2543,8 @@ docker stack deploy -c /volume1/docker/secret/swarm_vault_agent.yml  secret</cod
                     <p class="mb-0">
                         Dans le prochain article, on passera à la vitesse supérieure : on intégrera un
                         <code>ACME challenge</code>
-                        pour obtenir des certificats publics juste avec Vault (pas de cerbot ou autres), signés par une vraie autorité de certification (genre
+                        pour obtenir des certificats publics juste avec Vault (pas de cerbot ou autres), signés par une
+                        vraie autorité de certification (genre
                         Let's Encrypt). Fini les certificats auto-signés, place à la
                         gloire publique pour exposer sur Internet nos applications !
                         <strong>Stay tuned !</strong>
